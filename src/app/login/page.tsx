@@ -2,11 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { GraduationCap, Lock, Mail, ArrowRight, ShieldCheck, UserCheck } from "lucide-react";
+import { GraduationCap, Lock, Mail, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 
 export default function LoginPage() {
@@ -16,19 +15,17 @@ export default function LoginPage() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const handleSubmit = async (e?: React.FormEvent, customEmail?: string, customPassword?: string) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setError(null);
     setLoading(true);
 
-    const submitEmail = customEmail || email;
-    const submitPassword = customPassword || password;
 
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: submitEmail, password: submitPassword }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
@@ -56,12 +53,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleQuickLogin = (quickEmail: string, quickPass: string) => {
-    setEmail(quickEmail);
-    setPassword(quickPass);
-    handleSubmit(undefined, quickEmail, quickPass);
-  };
-
   return (
     <div className="min-h-screen flex flex-col justify-between bg-slate-50 dark:bg-slate-950 p-4 sm:p-6 lg:p-8">
       {/* Top Bar with Branding and Theme Toggle */}
@@ -72,7 +63,7 @@ export default function LoginPage() {
           </div>
           <div>
             <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
-              Apex Institute of Technology
+              SRGC
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Student Result Portal (SRP)
@@ -88,9 +79,7 @@ export default function LoginPage() {
           <CardHeader className="space-y-1 pb-4">
             <div className="flex items-center justify-between">
               <CardTitle className="text-xl font-bold">Sign In to SRP</CardTitle>
-              <Badge variant="outline" className="text-xs font-mono">
-                v2.4.0
-              </Badge>
+
             </div>
             <CardDescription>
               Enter your college credentials to access examination results and performance reports.
@@ -113,7 +102,7 @@ export default function LoginPage() {
                   <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                   <Input
                     type="email"
-                    placeholder="student@college.edu or admin@college.edu"
+                    placeholder="Enter your registered college email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -221,17 +210,12 @@ export default function LoginPage() {
               </div>
             </div>
           </CardContent>
-          <CardFooter className="pt-0">
-            <p className="text-[11px] text-center text-slate-500 w-full">
-              Protected by session encryption & server-side RBAC validation.
-            </p>
-          </CardFooter>
         </Card>
       </div>
 
       {/* Footer */}
       <footer className="text-center text-xs text-slate-500 max-w-6xl w-full mx-auto pt-6 border-t border-slate-200 dark:border-slate-800">
-        © 2026 Apex Institute of Technology & Engineering. All rights reserved.
+        © 2026 SRGC. All rights reserved.
       </footer>
     </div>
   );
