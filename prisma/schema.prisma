@@ -1,0 +1,374 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  role         String    // ADMIN, FACULTY, STUDENT
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  student      Student?
+  faculty      Faculty?
+  auditLogs    AuditLog[]
+  enteredMarks Mark[]    @relation("EnteredBy")
+  publishedExams Examination[] @relation("PublishedBy")
+  resultPublications ResultPublication[]
+  markCorrections MarkCorrectionAudit[]
+}
+
+model Department {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  branches  Branch[]
+  faculty   Faculty[]
+  students  Student[]
+}
+
+model Branch {
+  id           String      @id @default(cuid())
+  departmentId String
+  code         String      @unique
+  name         String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  department   Department  @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  batches      Batch[]
+  subjects     Subject[]
+  students     Student[]
+  sections     Section[]
+}
+
+model Batch {
+  id        String    @id @default(cuid())
+  branchId  String
+  name      String    // e.g. "2023-2027"
+  startYear Int
+  endYear   Int
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  branch       Branch      @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  students     Student[]
+  examinations Examination[]
+  studentEnrollments StudentEnrollment[]
+  studentExamEnrollments StudentExamEnrollment[]
+
+  @@unique([branchId, name])
+}
+
+model Semester {
+  id        String    @id @default(cuid())
+  number    Int       @unique
+  name      String    // e.g. "Semester 5"
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  subjects     Subject[]
+  students     Student[]   @relation("CurrentSemester")
+  examinations Examination[]
+  studentEnrollments StudentEnrollment[]
+  studentExamEnrollments StudentExamEnrollment[]
+  facultyAssignments FacultyAssignment[]
+}
+
+model Section {
+  id        String    @id @default(cuid())
+  branchId  String
+  name      String    // e.g. "A", "B", "C"
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  branch       Branch      @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  students     Student[]   @relation("CurrentSection")
+  studentEnrollments StudentEnrollment[]
+  studentExamEnrollments StudentExamEnrollment[]
+  facultyAssignments FacultyAssignment[]
+
+  @@unique([branchId, name])
+}
+
+model AcademicYear {
+  id        String    @id @default(cuid())
+  name      String    @unique // e.g. "2025-2026"
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  examinations Examination[]
+  studentEnrollments StudentEnrollment[]
+  facultyAssignments FacultyAssignment[]
+}
+
+model Student {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  rollNo            String    @unique
+  enrollmentNo      String    @unique
+  firstName         String
+  lastName          String
+  email             String    @unique
+  phone             String?
+  dateOfBirth       DateTime?
+  gender            String?
+  departmentId      String
+  branchId          String
+  batchId           String
+  currentSemesterId String
+  currentSectionId  String?
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department        Department  @relation(fields: [departmentId], references: [id])
+  branch            Branch      @relation(fields: [branchId], references: [id])
+  batch             Batch       @relation(fields: [batchId], references: [id])
+  currentSemester   Semester    @relation("CurrentSemester", fields: [currentSemesterId], references: [id])
+  currentSection    Section?    @relation("CurrentSection", fields: [currentSectionId], references: [id])
+
+  enrollments       StudentEnrollment[]
+  examEnrollments   StudentExamEnrollment[]
+  marks             Mark[]
+  markCorrections   MarkCorrectionAudit[]
+}
+
+model Faculty {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  employeeCode String    @unique
+  firstName    String
+  lastName     String
+  email        String    @unique
+  phone        String?
+  designation  String    // e.g. "Associate Professor"
+  departmentId String
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department   Department  @relation(fields: [departmentId], references: [id])
+  assignments  FacultyAssignment[]
+}
+
+model Subject {
+  id          String    @id @default(cuid())
+  code        String    @unique // e.g. "CS501"
+  name        String    // e.g. "Database Management Systems"
+  credits     Float     @default(3.0)
+  type        String    @default("THEORY") // THEORY, LAB, PRACTICAL, ELECTIVE
+  branchId    String
+  semesterId  String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  branch      Branch    @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  semester    Semester  @relation(fields: [semesterId], references: [id], onDelete: Cascade)
+  examSubjects ExamSubject[]
+  facultyAssignments FacultyAssignment[]
+}
+
+model StudentEnrollment {
+  id             String       @id @default(cuid())
+  studentId      String
+  academicYearId String
+  batchId        String
+  semesterId     String
+  sectionId      String?
+  status         String       @default("ACTIVE") // ACTIVE, COMPLETED, TRANSFERRED
+  enrolledAt     DateTime     @default(now())
+
+  student        Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  batch          Batch        @relation(fields: [batchId], references: [id])
+  semester       Semester     @relation(fields: [semesterId], references: [id])
+  section        Section?     @relation(fields: [sectionId], references: [id])
+
+  @@unique([studentId, academicYearId, semesterId])
+}
+
+model FacultyAssignment {
+  id             String       @id @default(cuid())
+  facultyId      String
+  subjectId      String
+  academicYearId String
+  semesterId     String
+  sectionId      String?
+  canEnterMarks  Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  faculty        Faculty      @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  subject        Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  semester       Semester     @relation(fields: [semesterId], references: [id])
+  section        Section?     @relation(fields: [sectionId], references: [id])
+
+  @@unique([facultyId, subjectId, academicYearId, semesterId, sectionId])
+}
+
+model Examination {
+  id             String       @id @default(cuid())
+  name           String       // e.g. "Internal Assessment 1", "Mid-Semester Examination"
+  academicYearId String
+  semesterId     String
+  batchId        String
+  examDate       DateTime
+  description    String?
+  status         String       @default("DRAFT") // DRAFT, UNDER_REVIEW, PUBLISHED, ARCHIVED
+  publishedAt    DateTime?
+  publishedById  String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  semester       Semester     @relation(fields: [semesterId], references: [id])
+  batch          Batch        @relation(fields: [batchId], references: [id])
+  publishedBy    User?        @relation("PublishedBy", fields: [publishedById], references: [id])
+
+  examSubjects   ExamSubject[]
+  studentExamEnrollments StudentExamEnrollment[]
+  publications   ResultPublication[]
+}
+
+model ExamSubject {
+  id           String       @id @default(cuid())
+  examId       String
+  subjectId    String
+  maxMarks     Float        @default(100.0)
+  passingMarks Float        @default(40.0)
+  weightage    Float?       @default(1.0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  examination  Examination  @relation(fields: [examId], references: [id], onDelete: Cascade)
+  subject      Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  marks        Mark[]
+  markCorrections MarkCorrectionAudit[]
+
+  @@unique([examId, subjectId])
+}
+
+model StudentExamEnrollment {
+  id              String       @id @default(cuid())
+  examId          String
+  studentId       String
+  batchId         String       // Snapshot of student's batch at exam time
+  semesterId      String       // Snapshot of student's semester at exam time
+  sectionId       String?      // Snapshot of student's section at exam time
+  isEligible      Boolean      @default(true)
+  ineligibleReason String?
+  createdAt       DateTime     @default(now())
+
+  examination     Examination  @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student         Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  batch           Batch        @relation(fields: [batchId], references: [id])
+  semester        Semester     @relation(fields: [semesterId], references: [id])
+  section         Section?     @relation(fields: [sectionId], references: [id])
+
+  @@unique([examId, studentId])
+}
+
+model Mark {
+  id            String       @id @default(cuid())
+  examSubjectId String
+  studentId     String
+  marksObtained Float?
+  isAbsent      Boolean      @default(false)
+  isWithheld    Boolean      @default(false)
+  status        String       @default("DRAFT") // DRAFT, UNDER_REVIEW, PUBLISHED
+  remarks       String?
+  enteredById   String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  examSubject   ExamSubject  @relation(fields: [examSubjectId], references: [id], onDelete: Cascade)
+  student       Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  enteredBy     User         @relation("EnteredBy", fields: [enteredById], references: [id])
+  corrections   MarkCorrectionAudit[]
+
+  @@unique([examSubjectId, studentId])
+}
+
+model MarkCorrectionAudit {
+  id            String       @id @default(cuid())
+  markId        String
+  examSubjectId String
+  studentId     String
+  previousMarks Float?
+  newMarks      Float?
+  previousStatus String?
+  newStatus      String?
+  reason        String
+  correctedById String
+  createdAt     DateTime     @default(now())
+
+  mark          Mark         @relation(fields: [markId], references: [id], onDelete: Cascade)
+  examSubject   ExamSubject  @relation(fields: [examSubjectId], references: [id], onDelete: Cascade)
+  student       Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  correctedBy   User         @relation(fields: [correctedById], references: [id])
+}
+
+model ResultPublication {
+  id              String       @id @default(cuid())
+  examId          String
+  publishedById   String
+  publishedAt     DateTime     @default(now())
+  unpublishReason String?
+  isActive        Boolean      @default(true)
+  version         Int          @default(1)
+
+  examination     Examination  @relation(fields: [examId], references: [id], onDelete: Cascade)
+  publishedBy     User         @relation(fields: [publishedById], references: [id])
+}
+
+model GradeScale {
+  id            String   @id @default(cuid())
+  name          String   @default("Standard 10-Point Scale")
+  minPercentage Float
+  maxPercentage Float
+  grade         String   // O, A+, A, B+, B, C, P, F
+  gradePoint    Float    // 10, 9, 8, 7, 6, 5, 4, 0
+  description   String?
+  createdAt     DateTime @default(now())
+
+  @@unique([minPercentage, maxPercentage])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String   // LOGIN, LOGOUT, MARKS_ENTERED, MARKS_UPDATED, RESULT_PUBLISHED, RESULT_CORRECTED, etc.
+  entityType String   // Mark, Examination, Student, Faculty, User
+  entityId   String?
+  details    String?  // JSON stringified details
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
