@@ -63,7 +63,7 @@ export default function LoginPage() {
           </div>
           <div>
             <h1 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
-              SRGC
+              Shri Ram Group of Colleges
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Student Result Portal (SRP)
@@ -143,7 +143,7 @@ export default function LoginPage() {
 
       {/* Footer */}
       <footer className="text-center text-xs text-slate-500 max-w-6xl w-full mx-auto pt-6 border-t border-slate-200 dark:border-slate-800">
-        © 2026 SRGC. All rights reserved.
+        © 2026 Shri Ram Group of Colleges. All rights reserved.
       </footer>
     </div>
   );
