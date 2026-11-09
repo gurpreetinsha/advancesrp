@@ -4,8 +4,13 @@ import { cookies } from "next/headers";
 import { prisma } from "./prisma";
 import { SessionUser, UserRole } from "./types";
 
-const JWT_SECRET_STRING = process.env.JWT_SECRET || "fallback-secret-key-advancesrp-minimum-32-chars-ok";
-const SECRET_KEY = new TextEncoder().encode(JWT_SECRET_STRING);
+function getSecretKey(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error("JWT_SECRET must be configured with at least 32 characters.");
+  }
+  return new TextEncoder().encode(secret);
+}
 const COOKIE_NAME = "srp_session";
 
 export async function hashPassword(password: string): Promise<string> {
@@ -22,12 +27,12 @@ export async function signToken(payload: SessionUser): Promise<string> {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("24h")
-    .sign(SECRET_KEY);
+    .sign(getSecretKey());
 }
 
 export async function verifyToken(token: string): Promise<SessionUser | null> {
   try {
-    const { payload } = await jwtVerify(token, SECRET_KEY);
+    const { payload } = await jwtVerify(token, getSecretKey());
     return payload as unknown as SessionUser;
   } catch {
     return null;
