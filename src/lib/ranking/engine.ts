@@ -5,10 +5,26 @@ import {
   GradeResult,
 } from "../types";
 
+export interface GradeScaleRule {
+  minPercentage: number;
+  maxPercentage: number;
+  grade: string;
+  gradePoint: number;
+  description?: string | null;
+}
+
 /**
- * Default standard grade scale lookup
+ * Resolve grades from the configured database scale when supplied.
+ * The highest configured minimum threshold not exceeding the percentage wins.
+ * A built-in fallback keeps pure-engine consumers and tests deterministic.
  */
-export function getGradeFromPercentage(percentage: number): GradeResult {
+export function getGradeFromPercentage(percentage: number, gradeScale?: GradeScaleRule[]): GradeResult {
+  if (gradeScale?.length) {
+    const rule = [...gradeScale]
+      .sort((a, b) => b.minPercentage - a.minPercentage)
+      .find((item) => percentage >= item.minPercentage);
+    if (rule) return { grade: rule.grade, gradePoint: rule.gradePoint, description: rule.description || rule.grade };
+  }
   if (percentage >= 90) return { grade: "O", gradePoint: 10, description: "Outstanding" };
   if (percentage >= 80) return { grade: "A+", gradePoint: 9, description: "Excellent" };
   if (percentage >= 70) return { grade: "A", gradePoint: 8, description: "Very Good" };
@@ -146,7 +162,8 @@ export interface RawStudentAggregate {
  * Calculate class-wise ranking (within a section / class)
  */
 export function calculateClassWiseRanking(
-  students: RawStudentAggregate[]
+  students: RawStudentAggregate[],
+  gradeScale?: GradeScaleRule[]
 ): ClassWiseRankItem[] {
   // Rank only complete, non-withheld records so students are compared over
   // the same configured subject set rather than different denominators.
@@ -175,7 +192,7 @@ export function calculateClassWiseRanking(
       }
 
       const subPercentage = sub.maxMarks > 0 ? (obtained / sub.maxMarks) * 100 : 0;
-      const gradeRes = getGradeFromPercentage(subPercentage);
+      const gradeRes = getGradeFromPercentage(subPercentage, gradeScale);
       totalWeightedPoints += gradeRes.gradePoint * (sub.credits || 1);
       totalCredits += sub.credits || 1;
     }
@@ -209,7 +226,8 @@ export function calculateClassWiseRanking(
  * Calculate batch-wise ranking (across all sections in a batch)
  */
 export function calculateBatchWiseRanking(
-  students: RawStudentAggregate[]
+  students: RawStudentAggregate[],
+  gradeScale?: GradeScaleRule[]
 ): BatchWiseRankItem[] {
   const eligibleStudents = students.filter((s) =>
     s.isEligible && s.subjectResults.length > 0 && s.subjectResults.every((sub) => !sub.isWithheld)
@@ -236,7 +254,7 @@ export function calculateBatchWiseRanking(
       }
 
       const subPercentage = sub.maxMarks > 0 ? (obtained / sub.maxMarks) * 100 : 0;
-      const gradeRes = getGradeFromPercentage(subPercentage);
+      const gradeRes = getGradeFromPercentage(subPercentage, gradeScale);
       totalWeightedPoints += gradeRes.gradePoint * (sub.credits || 1);
       totalCredits += sub.credits || 1;
     }
