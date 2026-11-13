@@ -34,8 +34,8 @@ export function assignCompetitionRanks<T>(
 
   // Sort descending by score; on tie use deterministic tieBreaker
   const sorted = [...items].sort((a, b) => {
-    const scoreDiff = getScore(b) - getScore(a);
-    if (Math.abs(scoreDiff) > 0.0001) return scoreDiff;
+    const scoreDiff = Number(getScore(b).toFixed(4)) - Number(getScore(a).toFixed(4));
+    if (scoreDiff !== 0) return scoreDiff;
     return tieBreaker(a, b);
   });
 
@@ -50,7 +50,7 @@ export function assignCompetitionRanks<T>(
       const currScore = getScore(sorted[i]);
 
       // If scores are equal within float tolerance, assign same rank as previous
-      if (Math.abs(prevScore - currScore) <= 0.0001) {
+      if (Number(prevScore.toFixed(4)) === Number(currScore.toFixed(4))) {
         ranked.push({ ...sorted[i], rank: currentRank });
       } else {
         currentRank = i + 1; // Competition rank skips ties!
@@ -81,8 +81,8 @@ export function calculateSubjectWiseRanking(
   marks: RawSubjectMark[]
 ): SubjectWiseRankItem[] {
   // Filter eligible and non-withheld students
+  const totalEligible = marks.filter((m) => m.isEligible).length;
   const eligibleMarks = marks.filter((m) => m.isEligible && !m.isWithheld);
-  const totalEligible = eligibleMarks.length;
 
   if (totalEligible === 0) return [];
 
@@ -156,7 +156,7 @@ export function calculateClassWiseRanking(
   const aggregates = eligibleStudents.map((student) => {
     let totalObtained = 0;
     let totalMax = 0;
-    let hasPassedAll = true;
+    let hasPassedAll = student.subjectResults.some((sub) => !sub.isWithheld);
     let totalWeightedPoints = 0;
     let totalCredits = 0;
 
@@ -187,7 +187,7 @@ export function calculateClassWiseRanking(
       totalObtained: Number(totalObtained.toFixed(2)),
       totalMax: Number(totalMax.toFixed(2)),
       aggregatePercentage: Number(aggregatePercentage.toFixed(2)),
-      sgpa: sgpa ? Number(sgpa.toFixed(2)) : undefined,
+      sgpa: sgpa !== undefined ? Number(sgpa.toFixed(2)) : undefined,
       totalEligible,
       hasPassedAll,
       subjectCount: student.subjectResults.length,
