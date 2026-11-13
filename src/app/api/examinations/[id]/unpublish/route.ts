@@ -20,9 +20,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       if (!exam) throw new Error("EXAM_NOT_FOUND");
       if (exam.status !== "PUBLISHED" || exam.publications.length === 0) throw new Error("EXAM_NOT_PUBLISHED");
 
-      await tx.examination.update({
-        where: { id: exam.id }, data: { status: "UNDER_REVIEW" },
+      const transition = await tx.examination.updateMany({
+        where: { id: exam.id, status: "PUBLISHED" },
+        data: { status: "UNDER_REVIEW" },
       });
+      if (transition.count !== 1) throw new Error("EXAM_STATE_CHANGED");
       await tx.mark.updateMany({
         where: { examSubjectId: { in: exam.examSubjects.map((s) => s.id) }, status: "PUBLISHED" },
         data: { status: "UNDER_REVIEW" },
@@ -44,6 +46,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message === "EXAM_NOT_FOUND") return NextResponse.json({ error: "Examination not found" }, { status: 404 });
+    if (message === "EXAM_STATE_CHANGED") return NextResponse.json({ error: "Examination state changed during unpublishing. Refresh and retry." }, { status: 409 });
     if (message === "EXAM_NOT_PUBLISHED") return NextResponse.json({ error: "Only currently published examinations can be unpublished." }, { status: 409 });
     console.error("Exam unpublish error:", error);
     return NextResponse.json({ error: "Failed to unpublish results" }, { status: 500 });
