@@ -40,19 +40,25 @@ export async function GET(req: Request) {
     if (semesterId) whereClause.semesterId = semesterId;
     if (batchId) whereClause.batchId = batchId;
 
-    // Faculty can view examinations relevant to their assigned subjects/semesters
-    if (session.role === "FACULTY" && session.facultyId) {
+    // Faculty see only examinations containing their assigned subjects in
+    // the assigned academic years and semesters.
+    if (session.role === "FACULTY") {
+      if (!session.facultyId) return NextResponse.json({ success: true, examinations: [] });
       const assignments = await prisma.facultyAssignment.findMany({
-        where: { facultyId: session.facultyId },
-        select: { semesterId: true },
+        where: { facultyId: session.facultyId, canEnterMarks: true },
+        select: { semesterId: true, academicYearId: true, subjectId: true },
       });
-      const allowedSemesters = Array.from(new Set(assignments.map((a) => a.semesterId)));
-      whereClause.semesterId = { in: allowedSemesters };
+      if (!assignments.length) return NextResponse.json({ success: true, examinations: [] });
+      whereClause.semesterId = { in: Array.from(new Set(assignments.map((a) => a.semesterId))) };
+      whereClause.academicYearId = { in: Array.from(new Set(assignments.map((a) => a.academicYearId))) };
+      whereClause.examSubjects = { some: { subjectId: { in: Array.from(new Set(assignments.map((a) => a.subjectId))) } } };
     }
 
-    // Students only ever see PUBLISHED examinations
+    // Students see only published examinations in which they have an enrollment snapshot.
     if (session.role === "STUDENT") {
+      if (!session.studentId) return NextResponse.json({ success: true, examinations: [] });
       whereClause.status = "PUBLISHED";
+      whereClause.studentExamEnrollments = { some: { studentId: session.studentId } };
     }
 
     const examinations = await prisma.examination.findMany({
