@@ -13,8 +13,10 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   try {
     const session = await getSession();
-    if (!session || (session.role !== "ADMIN" && session.role !== "FACULTY")) {
-      return NextResponse.json({ error: "Unauthorized access to export functions" }, { status: 403 });
+    if (!session || session.role !== "ADMIN") {
+      // Exports contain bulk student identifiers and marks. Until a fully
+      // scoped faculty export workflow is available, keep bulk export admin-only.
+      return NextResponse.json({ error: "Only administrators may export bulk student or examination data." }, { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);
@@ -54,24 +56,28 @@ export async function GET(req: Request) {
       if (!exam) {
         return NextResponse.json({ error: "Examination not found" }, { status: 404 });
       }
+      if (exam.status !== "PUBLISHED") {
+        return NextResponse.json({ error: "Ranking exports are available only for published examinations." }, { status: 409 });
+      }
+      const gradeScale = await prisma.gradeScale.findMany({ where: { name: process.env.GRADE_SCALE_NAME || "Standard 10-Point Scale" }, orderBy: { minPercentage: "desc" } });
 
       if (rankingType === "subject" && subjectId) {
         const examSub = exam.examSubjects.find((es) => es.subjectId === subjectId);
         if (!examSub) return NextResponse.json({ error: "Subject not found in exam" }, { status: 404 });
 
-        const enrollmentsMap = new Map(exam.studentExamEnrollments.map((e) => [e.studentId, e]));
-        const rawMarks = examSub.marks.map((m) => {
-          const enr = enrollmentsMap.get(m.studentId);
+        const marksByStudent = new Map(examSub.marks.map((mark) => [mark.studentId, mark]));
+        const rawMarks = exam.studentExamEnrollments.map((enrollment) => {
+          const mark = marksByStudent.get(enrollment.studentId);
           return {
-            studentId: m.studentId,
-            rollNo: m.student.rollNo,
-            studentName: `${m.student.firstName} ${m.student.lastName}`,
-            marksObtained: m.marksObtained,
+            studentId: enrollment.studentId,
+            rollNo: enrollment.student.rollNo,
+            studentName: `${enrollment.student.firstName} ${enrollment.student.lastName}`,
+            marksObtained: mark?.marksObtained ?? null,
             maxMarks: examSub.maxMarks,
             passingMarks: examSub.passingMarks,
-            isAbsent: m.isAbsent,
-            isWithheld: m.isWithheld,
-            isEligible: enr?.isEligible ?? true,
+            isAbsent: mark?.isAbsent ?? false,
+            isWithheld: mark?.isWithheld ?? false,
+            isEligible: enrollment.isEligible,
           };
         });
 
@@ -122,28 +128,29 @@ export async function GET(req: Request) {
         }
 
         for (const es of exam.examSubjects) {
-          for (const m of es.marks) {
-            const entry = cohortMap.get(m.studentId);
-            if (entry) {
-              entry.subjectResults.push({
-                subjectId: es.subject.id,
-                subjectCode: es.subject.code,
-                subjectName: es.subject.name,
-                credits: es.subject.credits,
-                maxMarks: es.maxMarks,
-                passingMarks: es.passingMarks,
-                marksObtained: m.marksObtained,
-                isAbsent: m.isAbsent,
-                isWithheld: m.isWithheld,
-              });
-            }
+          const marksByStudent = new Map(es.marks.map((mark) => [mark.studentId, mark]));
+          for (const enrollment of exam.studentExamEnrollments) {
+            const entry = cohortMap.get(enrollment.studentId);
+            if (!entry) continue;
+            const mark = marksByStudent.get(enrollment.studentId);
+            entry.subjectResults.push({
+              subjectId: es.subject.id,
+              subjectCode: es.subject.code,
+              subjectName: es.subject.name,
+              credits: es.subject.credits,
+              maxMarks: es.maxMarks,
+              passingMarks: es.passingMarks,
+              marksObtained: mark?.marksObtained ?? null,
+              isAbsent: mark?.isAbsent ?? false,
+              isWithheld: mark?.isWithheld ?? false,
+            });
           }
         }
 
         const studentsList = Array.from(cohortMap.values());
 
         if (rankingType === "class") {
-          const classRanks = calculateClassWiseRanking(studentsList);
+          const classRanks = calculateClassWiseRanking(studentsList, gradeScale);
           exportRows = classRanks.map((r) => ({
             Rank: r.rank,
             "Roll No": r.rollNo,
@@ -152,13 +159,13 @@ export async function GET(req: Request) {
             "Total Obtained": r.totalObtained,
             "Total Max": r.totalMax,
             "Aggregate (%)": r.aggregatePercentage,
-            SGPA: r.sgpa || "N/A",
+            SGPA: r.sgpa ?? "N/A",
             Status: r.hasPassedAll ? "PASS" : "FAIL",
             "Total Eligible": r.totalEligible,
           }));
           filename = `${exam.name.replace(/\s+/g, "_")}_Class_Rankings`;
         } else {
-          const batchRanks = calculateBatchWiseRanking(studentsList);
+          const batchRanks = calculateBatchWiseRanking(studentsList, gradeScale);
           exportRows = batchRanks.map((r) => ({
             Rank: r.rank,
             "Roll No": r.rollNo,
@@ -168,7 +175,7 @@ export async function GET(req: Request) {
             "Total Obtained": r.totalObtained,
             "Total Max": r.totalMax,
             "Normalized (%)": r.normalizedPercentage,
-            SGPA: r.sgpa || "N/A",
+            SGPA: r.sgpa ?? "N/A",
             Status: r.hasPassedAll ? "PASS" : "FAIL",
             "Total Eligible": r.totalEligible,
           }));

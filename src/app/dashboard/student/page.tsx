@@ -279,8 +279,8 @@ export default function StudentDashboardPage() {
                     <span className="text-2xl font-extrabold text-slate-900 dark:text-white font-mono">
                       {currentResult.overallGrade}
                     </span>
-                    <Badge variant={currentResult.overallStatus === "PASS" ? "success" : "destructive"}>
-                      {currentResult.overallStatus === "PASS" ? "PASSED" : "FAILED"}
+                    <Badge variant={currentResult.overallStatus === "PASS" ? "success" : currentResult.overallStatus === "INCOMPLETE" ? "warning" : "destructive"}>
+                      {currentResult.overallStatus === "PASS" ? "PASSED" : currentResult.overallStatus === "INCOMPLETE" ? "INCOMPLETE" : "FAILED"}
                     </Badge>
                   </div>
                   <div className="mt-1 text-xs text-slate-500">

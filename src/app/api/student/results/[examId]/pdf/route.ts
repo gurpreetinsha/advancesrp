@@ -60,7 +60,7 @@ export async function GET(req: Request, { params }: { params: { examId: string }
       },
     });
 
-    if (!exam || exam.status !== "PUBLISHED") {
+    if (!exam || exam.status !== "PUBLISHED" || exam.publications.length === 0) {
       return NextResponse.json(
         { error: "Result report cannot be generated for an unpublished examination." },
         { status: 400 }
@@ -69,7 +69,7 @@ export async function GET(req: Request, { params }: { params: { examId: string }
 
     // Historical student enrollment in this exam
     const myExamEnrollment = exam.studentExamEnrollments.find((e) => e.studentId === student.id);
-    if (!myExamEnrollment) {
+    if (!myExamEnrollment || !myExamEnrollment.isEligible) {
       return NextResponse.json({ error: "Student is not enrolled in this examination" }, { status: 404 });
     }
 
@@ -105,38 +105,40 @@ export async function GET(req: Request, { params }: { params: { examId: string }
     }
 
     for (const es of exam.examSubjects) {
-      for (const m of es.marks) {
-        const entry = cohortMap.get(m.studentId);
-        if (entry) {
-          entry.subjectResults.push({
-            subjectId: es.subject.id,
-            subjectCode: es.subject.code,
-            subjectName: es.subject.name,
-            credits: es.subject.credits,
-            maxMarks: es.maxMarks,
-            passingMarks: es.passingMarks,
-            marksObtained: m.marksObtained,
-            isAbsent: m.isAbsent,
-            isWithheld: m.isWithheld,
-          });
-        }
+      const marksByStudent = new Map(es.marks.map((mark) => [mark.studentId, mark]));
+      for (const enrollment of exam.studentExamEnrollments) {
+        const entry = cohortMap.get(enrollment.studentId);
+        if (!entry) continue;
+        const mark = marksByStudent.get(enrollment.studentId);
+        entry.subjectResults.push({
+          subjectId: es.subject.id,
+          subjectCode: es.subject.code,
+          subjectName: es.subject.name,
+          credits: es.subject.credits,
+          maxMarks: es.maxMarks,
+          passingMarks: es.passingMarks,
+          marksObtained: mark?.marksObtained ?? null,
+          isAbsent: mark?.isAbsent ?? false,
+          isWithheld: mark?.isWithheld ?? false,
+        });
       }
     }
 
+    const gradeScale = await prisma.gradeScale.findMany({ where: { name: process.env.GRADE_SCALE_NAME || "Standard 10-Point Scale" }, orderBy: { minPercentage: "desc" } });
     const allCohort = Array.from(cohortMap.values());
-    const batchRanks = calculateBatchWiseRanking(allCohort);
+    const batchRanks = calculateBatchWiseRanking(allCohort, gradeScale);
     const myBatchRank = batchRanks.find((r) => r.studentId === student.id);
 
     const sectionCohort = myExamEnrollment.sectionId
       ? allCohort.filter((s) => s.sectionId === myExamEnrollment.sectionId)
       : allCohort;
-    const classRanks = calculateClassWiseRanking(sectionCohort);
+    const classRanks = calculateClassWiseRanking(sectionCohort, gradeScale);
     const myClassRank = classRanks.find((r) => r.studentId === student.id);
 
     // Subject lines
     let totalObtained = 0;
     let totalMax = 0;
-    let hasPassedAll = true;
+    let hasPassedAll = exam.examSubjects.length > 0;
 
     const subjectsPDF = exam.examSubjects.map((es) => {
       const myMark = es.marks.find((m) => m.studentId === student.id);
@@ -145,14 +147,17 @@ export async function GET(req: Request, { params }: { params: { examId: string }
           ? null
           : (myMark.marksObtained as number);
 
-      totalMax += es.maxMarks;
-      totalObtained += obtained || 0;
+      const isWithheld = Boolean(myMark?.isWithheld);
+      if (!isWithheld) {
+        totalMax += es.maxMarks;
+        totalObtained += obtained || 0;
+      }
 
-      const isPass = obtained !== null && obtained >= es.passingMarks && !myMark?.isAbsent;
+      const isPass = !isWithheld && obtained !== null && obtained >= es.passingMarks && !myMark?.isAbsent;
       if (!isPass) hasPassedAll = false;
 
-      const pct = obtained !== null && es.maxMarks > 0 ? (obtained / es.maxMarks) * 100 : 0;
-      const grade = getGradeFromPercentage(pct);
+      const pct = !isWithheld && obtained !== null && es.maxMarks > 0 ? (obtained / es.maxMarks) * 100 : 0;
+      const grade = getGradeFromPercentage(pct, gradeScale);
 
       return {
         code: es.subject.code,
@@ -162,21 +167,21 @@ export async function GET(req: Request, { params }: { params: { examId: string }
         passingMarks: es.passingMarks,
         marksObtained: obtained,
         isAbsent: Boolean(myMark?.isAbsent),
-        grade: grade.grade,
-        gradePoint: grade.gradePoint,
-        status: (isPass ? "PASS" : (myMark?.isAbsent ? "ABSENT" : "FAIL")) as "PASS" | "FAIL" | "ABSENT",
+        grade: isWithheld ? "WH" : grade.grade,
+        gradePoint: isWithheld ? 0 : grade.gradePoint,
+        status: (isWithheld ? "WITHHELD" : isPass ? "PASS" : (myMark?.isAbsent ? "ABSENT" : "FAIL")) as "PASS" | "FAIL" | "ABSENT" | "WITHHELD",
       };
     });
 
     const percentage = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
-    const overallGrade = getGradeFromPercentage(percentage);
+    const overallGrade = getGradeFromPercentage(percentage, gradeScale);
 
-    const verificationCode = `AITE-VERIFY-${exam.id.substring(0, 6).toUpperCase()}-${student.rollNo}-${Date.now().toString(36).toUpperCase()}`;
+    const verificationCode = `SRGC-REF-${exam.id.substring(0, 6).toUpperCase()}-${student.rollNo}-${Date.now().toString(36).toUpperCase()}`;
 
     const pdfData: PDFResultData = {
-      collegeName: process.env.COLLEGE_NAME || "Apex Institute of Technology & Engineering",
-      collegeCode: process.env.COLLEGE_CODE || "AITE",
-      accreditation: "Autonomous Institution | Approved by AICTE & Accredited with Grade A++",
+      collegeName: process.env.COLLEGE_NAME || "Shri Ram Group of Colleges",
+      collegeCode: process.env.COLLEGE_CODE || "SRGC",
+      accreditation: process.env.COLLEGE_ACCREDITATION || undefined,
       studentName: `${student.firstName} ${student.lastName}`,
       rollNo: student.rollNo,
       enrollmentNo: student.enrollmentNo,
@@ -193,11 +198,12 @@ export async function GET(req: Request, { params }: { params: { examId: string }
       totalObtained: Number(totalObtained.toFixed(2)),
       totalMax: Number(totalMax.toFixed(2)),
       percentage: Number(percentage.toFixed(2)),
-      overallGrade: overallGrade.grade,
-      overallStatus: hasPassedAll ? "PASS" : "FAIL",
+      overallGrade: subjectsPDF.some((subject) => subject.status === "WITHHELD") ? "I" : overallGrade.grade,
+      overallStatus: subjectsPDF.some((subject) => subject.status === "WITHHELD") ? "INCOMPLETE" : hasPassedAll ? "PASS" : "FAIL",
       sgpa: myClassRank?.sgpa,
       classRank: myClassRank ? { rank: myClassRank.rank, totalEligible: myClassRank.totalEligible } : undefined,
       batchRank: myBatchRank ? { rank: myBatchRank.rank, totalEligible: myBatchRank.totalEligible } : undefined,
+      gradeLegend: gradeScale.map((rule) => `${rule.grade} >= ${rule.minPercentage}%`).join(" | "),
       verificationCode,
     };
 

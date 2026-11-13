@@ -35,6 +35,8 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
+    const gradeScale = await prisma.gradeScale.findMany({ where: { name: process.env.GRADE_SCALE_NAME || "Standard 10-Point Scale" }, orderBy: { minPercentage: "desc" } });
+
     // Fetch published examinations the student is enrolled in
     const examEnrollments = await prisma.studentExamEnrollment.findMany({
       where: {
@@ -132,54 +134,58 @@ export async function GET(req: Request) {
         });
       }
 
-      // Populate subject marks for all cohort students
+      // Build a complete subject matrix from the historical exam enrollment snapshot.
+      // Missing marks are represented explicitly rather than silently omitted from aggregates.
       for (const es of exam.examSubjects) {
-        for (const m of es.marks) {
-          const sEntry = cohortStudentsMap.get(m.studentId);
-          if (sEntry) {
-            sEntry.subjectResults.push({
-              subjectId: es.subject.id,
-              subjectCode: es.subject.code,
-              subjectName: es.subject.name,
-              credits: es.subject.credits,
-              maxMarks: es.maxMarks,
-              passingMarks: es.passingMarks,
-              marksObtained: m.marksObtained,
-              isAbsent: m.isAbsent,
-              isWithheld: m.isWithheld,
-            });
-          }
+        const marksByStudent = new Map(es.marks.map((mark) => [mark.studentId, mark]));
+        for (const enr of exam.studentExamEnrollments) {
+          const sEntry = cohortStudentsMap.get(enr.studentId);
+          if (!sEntry) continue;
+          const mark = marksByStudent.get(enr.studentId);
+          sEntry.subjectResults.push({
+            subjectId: es.subject.id,
+            subjectCode: es.subject.code,
+            subjectName: es.subject.name,
+            credits: es.subject.credits,
+            maxMarks: es.maxMarks,
+            passingMarks: es.passingMarks,
+            marksObtained: mark?.marksObtained ?? null,
+            isAbsent: mark?.isAbsent ?? false,
+            isWithheld: mark?.isWithheld ?? false,
+          });
         }
       }
 
       const allCohortStudents = Array.from(cohortStudentsMap.values());
 
       // 2. Compute Batch-wide Ranking
-      const batchRankings = calculateBatchWiseRanking(allCohortStudents);
+      const batchRankings = calculateBatchWiseRanking(allCohortStudents, gradeScale);
       const studentBatchRank = batchRankings.find((r) => r.studentId === student.id);
 
       // 3. Compute Class-wide Ranking (students within same historical section)
       const sectionCohortStudents = historicalSectionId
         ? allCohortStudents.filter((s) => s.sectionId === historicalSectionId)
         : allCohortStudents;
-      const classRankings = calculateClassWiseRanking(sectionCohortStudents);
+      const classRankings = calculateClassWiseRanking(sectionCohortStudents, gradeScale);
       const studentClassRank = classRankings.find((r) => r.studentId === student.id);
 
       // 4. Compute Subject-wise Ranking for each subject in this exam
       const subjectResultsForStudent = exam.examSubjects.map((es) => {
         // Collect all student marks in this subject
-        const rawSubjectMarks = es.marks.map((m) => {
-          const sEnr = cohortStudentsMap.get(m.studentId);
+        const marksByStudent = new Map(es.marks.map((mark) => [mark.studentId, mark]));
+        const rawSubjectMarks = exam.studentExamEnrollments.map((enr) => {
+          const sEnr = cohortStudentsMap.get(enr.studentId);
+          const mark = marksByStudent.get(enr.studentId);
           return {
-            studentId: m.studentId,
+            studentId: enr.studentId,
             rollNo: sEnr?.rollNo || "",
             studentName: sEnr?.studentName || "",
-            marksObtained: m.marksObtained,
+            marksObtained: mark?.marksObtained ?? null,
             maxMarks: es.maxMarks,
             passingMarks: es.passingMarks,
-            isAbsent: m.isAbsent,
-            isWithheld: m.isWithheld,
-            isEligible: sEnr?.isEligible ?? true,
+            isAbsent: mark?.isAbsent ?? false,
+            isWithheld: mark?.isWithheld ?? false,
+            isEligible: enr.isEligible,
           };
         });
 
@@ -194,7 +200,7 @@ export async function GET(req: Request) {
             : (myMarkRecord.marksObtained as number);
 
         const percentage = obtained !== null && es.maxMarks > 0 ? (obtained / es.maxMarks) * 100 : 0;
-        const gradeInfo = getGradeFromPercentage(percentage);
+        const gradeInfo = getGradeFromPercentage(percentage, gradeScale);
 
         // Class average for comparison chart
         const validMarks = es.marks.filter((m) => !m.isAbsent && m.marksObtained !== null).map((m) => m.marksObtained!);
@@ -230,7 +236,7 @@ export async function GET(req: Request) {
       // Overall totals for this exam
       let totalObtained = 0;
       let totalMax = 0;
-      let hasPassedAll = true;
+      let hasPassedAll = subjectResultsForStudent.length > 0 && subjectResultsForStudent.every((subject) => !subject.isWithheld);
 
       for (const sr of subjectResultsForStudent) {
         if (sr.isWithheld) continue;
@@ -257,8 +263,8 @@ export async function GET(req: Request) {
         totalMax: Number(totalMax.toFixed(2)),
         percentage: Number(overallPercentage.toFixed(2)),
         sgpa: studentClassRank?.sgpa,
-        overallGrade: overallGrade.grade,
-        overallStatus: hasPassedAll ? "PASS" : "FAIL",
+        overallGrade: subjectResultsForStudent.some((subject) => subject.isWithheld) ? "I" : overallGrade.grade,
+        overallStatus: subjectResultsForStudent.some((subject) => subject.isWithheld) ? "INCOMPLETE" : hasPassedAll ? "PASS" : "FAIL",
         classRank: studentClassRank
           ? { rank: studentClassRank.rank, totalEligible: studentClassRank.totalEligible }
           : null,
@@ -270,8 +276,12 @@ export async function GET(req: Request) {
 
     // Determine selected result (or latest)
     const selectedResult = requestedExamId
-      ? processedResults.find((r) => r.examId === requestedExamId) || processedResults[0]
+      ? processedResults.find((r) => r.examId === requestedExamId)
       : processedResults[0];
+
+    if (requestedExamId && !selectedResult) {
+      return NextResponse.json({ error: "No published result found for this examination." }, { status: 404 });
+    }
 
     // Performance trend across published exams (sorted chronologically)
     const performanceTrends = [...processedResults]

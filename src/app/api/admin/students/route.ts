@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getSession, hashPassword, logAudit } from "@/lib/auth";
+import { getSession, hashPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ const createStudentSchema = z.object({
   batchId: z.string(),
   currentSemesterId: z.string(),
   currentSectionId: z.string().optional(),
-  password: z.string().min(6).default("Student@12345"),
+  password: z.string().min(12, "Use a password of at least 12 characters"),
 });
 
 export async function GET(req: Request) {
@@ -105,6 +105,19 @@ export async function POST(req: Request) {
 
     const data = parsed.data;
 
+    const [branch, batch, semester, section] = await Promise.all([
+      prisma.branch.findUnique({ where: { id: data.branchId }, select: { id: true, departmentId: true } }),
+      prisma.batch.findUnique({ where: { id: data.batchId }, select: { id: true, branchId: true } }),
+      prisma.semester.findUnique({ where: { id: data.currentSemesterId }, select: { id: true } }),
+      data.currentSectionId
+        ? prisma.section.findUnique({ where: { id: data.currentSectionId }, select: { id: true, branchId: true } })
+        : Promise.resolve(null),
+    ]);
+    if (!branch || !batch || !semester || branch.departmentId !== data.departmentId ||
+        batch.branchId !== data.branchId || (data.currentSectionId && (!section || section.branchId !== data.branchId))) {
+      return NextResponse.json({ error: "Department, branch, batch, semester, and section selections are inconsistent." }, { status: 400 });
+    }
+
     // Check duplicate email, roll, enrollment
     const existing = await prisma.student.findFirst({
       where: {
@@ -170,15 +183,13 @@ export async function POST(req: Request) {
         });
       }
 
+      await tx.auditLog.create({
+        data: {
+          userId: session.id, action: "STUDENT_CREATED", entityType: "Student", entityId: newStudent.id,
+          details: JSON.stringify({ rollNo: newStudent.rollNo, name: `${newStudent.firstName} ${newStudent.lastName}` }),
+        },
+      });
       return newStudent;
-    });
-
-    await logAudit({
-      userId: session.id,
-      action: "STUDENT_CREATED",
-      entityType: "Student",
-      entityId: student.id,
-      details: { rollNo: student.rollNo, name: `${student.firstName} ${student.lastName}` },
     });
 
     return NextResponse.json({ success: true, student }, { status: 201 });
@@ -230,14 +241,12 @@ export async function PUT(req: Request) {
           data: { isActive },
         });
       }
-    });
-
-    await logAudit({
-      userId: session.id,
-      action: "STUDENT_UPDATED",
-      entityType: "Student",
-      entityId: id,
-      details: { rollNo: student.rollNo, changes: body },
+      await tx.auditLog.create({
+        data: {
+          userId: session.id, action: "STUDENT_UPDATED", entityType: "Student", entityId: id,
+          details: JSON.stringify({ rollNo: student.rollNo, changes: body }),
+        },
+      });
     });
 
     return NextResponse.json({ success: true, message: "Student record updated successfully" });

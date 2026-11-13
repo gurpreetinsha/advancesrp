@@ -1,76 +1,54 @@
 import { NextResponse } from "next/server";
-import { getSession, logAudit } from "@/lib/auth";
+import { z } from "zod";
+import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+
+const schema = z.object({ reason: z.string().trim().min(5).max(1000) });
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
     const session = await getSession();
-    if (!session || session.role !== "ADMIN") {
-      return NextResponse.json({ error: "Only administrators can unpublish examination results" }, { status: 403 });
-    }
+    if (!session || session.role !== "ADMIN") return NextResponse.json({ error: "Only administrators can unpublish results." }, { status: 403 });
+    const parsed = schema.safeParse(await req.json());
+    if (!parsed.success) return NextResponse.json({ error: "A valid unpublishing reason is required.", details: parsed.error.flatten() }, { status: 400 });
 
-    const body = await req.json();
-    const reason = body.reason?.trim();
-
-    if (!reason || reason.length < 5) {
-      return NextResponse.json(
-        { error: "A valid reason (minimum 5 characters) is required to unpublish results." },
-        { status: 400 }
-      );
-    }
-
-    const examId = params.id;
-    const exam = await prisma.examination.findUnique({
-      where: { id: examId },
-      include: { examSubjects: true },
-    });
-
-    if (!exam) {
-      return NextResponse.json({ error: "Examination not found" }, { status: 404 });
-    }
-
-    await prisma.$transaction(async (tx) => {
-      // 1. Set exam status to UNDER_REVIEW
-      await tx.examination.update({
-        where: { id: examId },
-        data: {
-          status: "UNDER_REVIEW",
-        },
+    const result = await prisma.$transaction(async (tx) => {
+      const exam = await tx.examination.findUnique({
+        where: { id: params.id },
+        include: { examSubjects: { select: { id: true } }, publications: { where: { isActive: true } } },
       });
+      if (!exam) throw new Error("EXAM_NOT_FOUND");
+      if (exam.status !== "PUBLISHED" || exam.publications.length === 0) throw new Error("EXAM_NOT_PUBLISHED");
 
-      // 2. Set marks back to UNDER_REVIEW
-      for (const es of exam.examSubjects) {
-        await tx.mark.updateMany({
-          where: { examSubjectId: es.id },
-          data: { status: "UNDER_REVIEW" },
-        });
-      }
-
-      // 3. Mark active publication as inactive with reason
+      const transition = await tx.examination.updateMany({
+        where: { id: exam.id, status: "PUBLISHED" },
+        data: { status: "UNDER_REVIEW" },
+      });
+      if (transition.count !== 1) throw new Error("EXAM_STATE_CHANGED");
+      await tx.mark.updateMany({
+        where: { examSubjectId: { in: exam.examSubjects.map((s) => s.id) }, status: "PUBLISHED" },
+        data: { status: "UNDER_REVIEW" },
+      });
       await tx.resultPublication.updateMany({
-        where: { examId, isActive: true },
+        where: { examId: exam.id, isActive: true },
+        data: { isActive: false, unpublishReason: parsed.data.reason },
+      });
+      await tx.auditLog.create({
         data: {
-          isActive: false,
-          unpublishReason: reason,
+          userId: session.id, action: "RESULT_UNPUBLISHED", entityType: "Examination", entityId: exam.id,
+          details: JSON.stringify({ examName: exam.name, reason: parsed.data.reason }),
         },
       });
+      return exam.name;
     });
 
-    await logAudit({
-      userId: session.id,
-      action: "RESULT_UNPUBLISHED",
-      entityType: "Examination",
-      entityId: examId,
-      details: { examName: exam.name, reason },
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: `Results for '${exam.name}' have been unpublished for review/correction.`,
-    });
+    return NextResponse.json({ success: true, message: `Results for '${result}' have been unpublished for review/correction.` });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message === "EXAM_NOT_FOUND") return NextResponse.json({ error: "Examination not found" }, { status: 404 });
+    if (message === "EXAM_STATE_CHANGED") return NextResponse.json({ error: "Examination state changed during unpublishing. Refresh and retry." }, { status: 409 });
+    if (message === "EXAM_NOT_PUBLISHED") return NextResponse.json({ error: "Only currently published examinations can be unpublished." }, { status: 409 });
     console.error("Exam unpublish error:", error);
     return NextResponse.json({ error: "Failed to unpublish results" }, { status: 500 });
   }
 }
-

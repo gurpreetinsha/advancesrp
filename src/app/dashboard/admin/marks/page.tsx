@@ -333,6 +333,8 @@ function AdminMarksContent() {
                           variant="outline"
                           size="sm"
                           onClick={() => handleOpenCorrection(student)}
+                          disabled={examSubjectData?.examStatus !== "PUBLISHED" || !student.markId}
+                          title={examSubjectData?.examStatus !== "PUBLISHED" ? "Corrections are available only for published results" : !student.markId ? "Enter a mark before applying a correction" : "Correct published mark"}
                           className="h-7 text-xs gap-1 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-300"
                         >
                           <History className="h-3 w-3" />

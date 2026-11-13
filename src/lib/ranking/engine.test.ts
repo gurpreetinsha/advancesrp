@@ -222,5 +222,42 @@ describe("Ranking Engine", () => {
       expect(getGradeFromPercentage(35)).toEqual({ grade: "F", gradePoint: 0, description: "Fail" });
     });
   });
+
+  describe("Incomplete and withheld records", () => {
+    it("must not mark an all-withheld student as passed", () => {
+      const ranks = calculateClassWiseRanking([{
+        studentId: "s1", rollNo: "CS01", studentName: "Student", isEligible: true,
+        subjectResults: [{
+          subjectId: "sub1", subjectCode: "CS501", subjectName: "DBMS",
+          credits: 3, maxMarks: 100, passingMarks: 40,
+          marksObtained: null, isAbsent: false, isWithheld: true,
+        }],
+      }]);
+      expect(ranks).toHaveLength(0);
+    });
+
+    it("must preserve a legitimate zero SGPA", () => {
+      const ranks = calculateBatchWiseRanking([{
+        studentId: "s1", rollNo: "CS01", studentName: "Student", isEligible: true,
+        subjectResults: [{
+          subjectId: "sub1", subjectCode: "CS501", subjectName: "DBMS",
+          credits: 3, maxMarks: 100, passingMarks: 40,
+          marksObtained: 0, isAbsent: false, isWithheld: false,
+        }],
+      }]);
+      expect(ranks[0].hasPassedAll).toBe(false);
+      expect(ranks[0].sgpa).toBe(0);
+    });
+  });
+
+
+  describe("Configured institutional grade scales", () => {
+    it("uses the configured threshold and grade point when supplied", () => {
+      expect(getGradeFromPercentage(75, [
+        { minPercentage: 0, maxPercentage: 100, grade: "X", gradePoint: 5, description: "Institutional grade" },
+      ])).toEqual({ grade: "X", gradePoint: 5, description: "Institutional grade" });
+    });
+  });
+
 });
 

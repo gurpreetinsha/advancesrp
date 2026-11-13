@@ -5,10 +5,26 @@ import {
   GradeResult,
 } from "../types";
 
+export interface GradeScaleRule {
+  minPercentage: number;
+  maxPercentage: number;
+  grade: string;
+  gradePoint: number;
+  description?: string | null;
+}
+
 /**
- * Default standard grade scale lookup
+ * Resolve grades from the configured database scale when supplied.
+ * The highest configured minimum threshold not exceeding the percentage wins.
+ * A built-in fallback keeps pure-engine consumers and tests deterministic.
  */
-export function getGradeFromPercentage(percentage: number): GradeResult {
+export function getGradeFromPercentage(percentage: number, gradeScale?: GradeScaleRule[]): GradeResult {
+  if (gradeScale?.length) {
+    const rule = [...gradeScale]
+      .sort((a, b) => b.minPercentage - a.minPercentage)
+      .find((item) => percentage >= item.minPercentage);
+    if (rule) return { grade: rule.grade, gradePoint: rule.gradePoint, description: rule.description || rule.grade };
+  }
   if (percentage >= 90) return { grade: "O", gradePoint: 10, description: "Outstanding" };
   if (percentage >= 80) return { grade: "A+", gradePoint: 9, description: "Excellent" };
   if (percentage >= 70) return { grade: "A", gradePoint: 8, description: "Very Good" };
@@ -34,8 +50,8 @@ export function assignCompetitionRanks<T>(
 
   // Sort descending by score; on tie use deterministic tieBreaker
   const sorted = [...items].sort((a, b) => {
-    const scoreDiff = getScore(b) - getScore(a);
-    if (Math.abs(scoreDiff) > 0.0001) return scoreDiff;
+    const scoreDiff = Number(getScore(b).toFixed(4)) - Number(getScore(a).toFixed(4));
+    if (scoreDiff !== 0) return scoreDiff;
     return tieBreaker(a, b);
   });
 
@@ -50,7 +66,7 @@ export function assignCompetitionRanks<T>(
       const currScore = getScore(sorted[i]);
 
       // If scores are equal within float tolerance, assign same rank as previous
-      if (Math.abs(prevScore - currScore) <= 0.0001) {
+      if (Number(prevScore.toFixed(4)) === Number(currScore.toFixed(4))) {
         ranked.push({ ...sorted[i], rank: currentRank });
       } else {
         currentRank = i + 1; // Competition rank skips ties!
@@ -81,8 +97,8 @@ export function calculateSubjectWiseRanking(
   marks: RawSubjectMark[]
 ): SubjectWiseRankItem[] {
   // Filter eligible and non-withheld students
+  const totalEligible = marks.filter((m) => m.isEligible).length;
   const eligibleMarks = marks.filter((m) => m.isEligible && !m.isWithheld);
-  const totalEligible = eligibleMarks.length;
 
   if (totalEligible === 0) return [];
 
@@ -146,9 +162,14 @@ export interface RawStudentAggregate {
  * Calculate class-wise ranking (within a section / class)
  */
 export function calculateClassWiseRanking(
-  students: RawStudentAggregate[]
+  students: RawStudentAggregate[],
+  gradeScale?: GradeScaleRule[]
 ): ClassWiseRankItem[] {
-  const eligibleStudents = students.filter((s) => s.isEligible);
+  // Rank only complete, non-withheld records so students are compared over
+  // the same configured subject set rather than different denominators.
+  const eligibleStudents = students.filter((s) =>
+    s.isEligible && s.subjectResults.length > 0 && s.subjectResults.every((sub) => !sub.isWithheld)
+  );
   const totalEligible = eligibleStudents.length;
 
   if (totalEligible === 0) return [];
@@ -156,7 +177,7 @@ export function calculateClassWiseRanking(
   const aggregates = eligibleStudents.map((student) => {
     let totalObtained = 0;
     let totalMax = 0;
-    let hasPassedAll = true;
+    let hasPassedAll = student.subjectResults.length > 0 && student.subjectResults.every((sub) => !sub.isWithheld);
     let totalWeightedPoints = 0;
     let totalCredits = 0;
 
@@ -171,7 +192,7 @@ export function calculateClassWiseRanking(
       }
 
       const subPercentage = sub.maxMarks > 0 ? (obtained / sub.maxMarks) * 100 : 0;
-      const gradeRes = getGradeFromPercentage(subPercentage);
+      const gradeRes = getGradeFromPercentage(subPercentage, gradeScale);
       totalWeightedPoints += gradeRes.gradePoint * (sub.credits || 1);
       totalCredits += sub.credits || 1;
     }
@@ -187,7 +208,7 @@ export function calculateClassWiseRanking(
       totalObtained: Number(totalObtained.toFixed(2)),
       totalMax: Number(totalMax.toFixed(2)),
       aggregatePercentage: Number(aggregatePercentage.toFixed(2)),
-      sgpa: sgpa ? Number(sgpa.toFixed(2)) : undefined,
+      sgpa: sgpa !== undefined ? Number(sgpa.toFixed(2)) : undefined,
       totalEligible,
       hasPassedAll,
       subjectCount: student.subjectResults.length,
@@ -205,9 +226,12 @@ export function calculateClassWiseRanking(
  * Calculate batch-wise ranking (across all sections in a batch)
  */
 export function calculateBatchWiseRanking(
-  students: RawStudentAggregate[]
+  students: RawStudentAggregate[],
+  gradeScale?: GradeScaleRule[]
 ): BatchWiseRankItem[] {
-  const eligibleStudents = students.filter((s) => s.isEligible);
+  const eligibleStudents = students.filter((s) =>
+    s.isEligible && s.subjectResults.length > 0 && s.subjectResults.every((sub) => !sub.isWithheld)
+  );
   const totalEligible = eligibleStudents.length;
 
   if (totalEligible === 0) return [];
@@ -215,7 +239,7 @@ export function calculateBatchWiseRanking(
   const aggregates = eligibleStudents.map((student) => {
     let totalObtained = 0;
     let totalMax = 0;
-    let hasPassedAll = true;
+    let hasPassedAll = student.subjectResults.length > 0 && student.subjectResults.every((sub) => !sub.isWithheld);
     let totalWeightedPoints = 0;
     let totalCredits = 0;
 
@@ -230,7 +254,7 @@ export function calculateBatchWiseRanking(
       }
 
       const subPercentage = sub.maxMarks > 0 ? (obtained / sub.maxMarks) * 100 : 0;
-      const gradeRes = getGradeFromPercentage(subPercentage);
+      const gradeRes = getGradeFromPercentage(subPercentage, gradeScale);
       totalWeightedPoints += gradeRes.gradePoint * (sub.credits || 1);
       totalCredits += sub.credits || 1;
     }
@@ -247,7 +271,7 @@ export function calculateBatchWiseRanking(
       totalObtained: Number(totalObtained.toFixed(2)),
       totalMax: Number(totalMax.toFixed(2)),
       normalizedPercentage: Number(normalizedPercentage.toFixed(2)),
-      sgpa: sgpa ? Number(sgpa.toFixed(2)) : undefined,
+      sgpa: sgpa !== undefined ? Number(sgpa.toFixed(2)) : undefined,
       totalEligible,
       hasPassedAll,
     };

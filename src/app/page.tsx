@@ -38,7 +38,7 @@ export default async function HomePage() {
             </div>
             <div>
               <span className="text-base font-bold tracking-tight block">
-                Apex Institute of Technology
+                Shri Ram Group of Colleges
               </span>
               <span className="text-[11px] text-slate-500 uppercase tracking-wider block">
                 Student Result Portal (SRP)
@@ -62,7 +62,7 @@ export default async function HomePage() {
       <main className="flex-1">
         <section className="px-6 py-16 sm:py-24 max-w-7xl mx-auto text-center">
           <Badge variant="outline" className="mb-4 px-3 py-1 text-xs border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-300">
-            Autonomous College Examination System • Version 2.4.0
+            SRGC Examination & Results Portal • Version 2.4.0
           </Badge>
 
           <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight max-w-4xl mx-auto text-balance">
@@ -103,7 +103,7 @@ export default async function HomePage() {
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-5 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="text-3xl font-extrabold text-amber-600">RBAC</div>
-              <div className="mt-1 text-xs text-slate-500 font-medium">Immutable Audit Trail</div>
+              <div className="mt-1 text-xs text-slate-500 font-medium">Recorded Audit Events</div>
             </div>
           </div>
         </section>
@@ -197,7 +197,7 @@ export default async function HomePage() {
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-8 px-6 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>Apex Institute of Technology & Engineering — Student Result Portal (SRP)</div>
+          <div>Shri Ram Group of Colleges (SRGC) — Student Result Portal</div>
           <div className="flex items-center gap-4">
             <Link href="/login" className="hover:underline">Portal Sign In</Link>
             <span>•</span>

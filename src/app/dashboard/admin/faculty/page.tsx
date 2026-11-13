@@ -29,6 +29,7 @@ export default function AdminFacultyPage() {
   const [lastName, setLastName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [phone, setPhone] = React.useState("");
+  const [password, setPassword] = React.useState("");
   const [designation, setDesignation] = React.useState("Assistant Professor");
   const [departmentId, setDepartmentId] = React.useState("");
 
@@ -100,7 +101,7 @@ export default function AdminFacultyPage() {
           phone,
           designation,
           departmentId,
-          password: "Faculty@12345",
+          password,
         }),
       });
 
@@ -108,13 +109,14 @@ export default function AdminFacultyPage() {
       if (!res.ok) {
         alert(data.error || "Failed to create faculty.");
       } else {
-        alert("Faculty created successfully! Default login password: Faculty@12345");
+        alert("Faculty account created. Share the initial password securely with the faculty member.");
         setCreateFacultyOpen(false);
         setEmpCode("");
         setFirstName("");
         setLastName("");
         setEmail("");
         setPhone("");
+        setPassword("");
         fetchFaculty();
       }
       setActionLoading(false);
@@ -348,6 +350,11 @@ export default function AdminFacultyPage() {
                   <option key={d.id} value={d.id} className="dark:bg-slate-900">{d.name} ({d.code})</option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold block mb-1">Initial password (minimum 12 characters)</label>
+              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={12} autoComplete="new-password" required />
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
