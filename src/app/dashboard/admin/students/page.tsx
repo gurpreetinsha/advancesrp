@@ -31,6 +31,7 @@ export default function AdminStudentsPage() {
   const [lastName, setLastName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [phone, setPhone] = React.useState("");
+  const [password, setPassword] = React.useState("");
   const [selectedBranchId, setSelectedBranchId] = React.useState("");
   const [selectedBatchId, setSelectedBatchId] = React.useState("");
   const [selectedSemesterId, setSelectedSemesterId] = React.useState("");
@@ -121,7 +122,7 @@ export default function AdminStudentsPage() {
           batchId: selectedBatchId,
           currentSemesterId: selectedSemesterId,
           currentSectionId: selectedSectionId,
-          password: "Student@12345",
+          password,
         }),
       });
 
@@ -129,7 +130,7 @@ export default function AdminStudentsPage() {
       if (!res.ok) {
         alert(data.error || "Failed to create student.");
       } else {
-        alert("Student registered successfully! Default login password: Student@12345");
+        alert("Student registered successfully. Share the initial password securely with the student.");
         setCreateModalOpen(false);
         setRollNo("");
         setEnrollmentNo("");
@@ -137,6 +138,7 @@ export default function AdminStudentsPage() {
         setLastName("");
         setEmail("");
         setPhone("");
+        setPassword("");
         fetchStudents();
       }
       setCreating(false);
@@ -437,6 +439,11 @@ export default function AdminStudentsPage() {
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold block mb-1">Initial password (minimum 12 characters)</label>
+              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={12} autoComplete="new-password" required />
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
