@@ -222,6 +222,7 @@ export async function GET(req: Request) {
     }
 
     const allStudents = Array.from(cohortStudentsMap.values());
+    const gradeScale = await prisma.gradeScale.findMany({ orderBy: { minPercentage: "desc" } });
 
     // 2. Class-wise ranking
     if (type === "class") {
@@ -230,7 +231,7 @@ export async function GET(req: Request) {
         filteredStudents = allStudents.filter((s) => s.sectionId === sectionId);
       }
 
-      const classRankings = calculateClassWiseRanking(filteredStudents);
+      const classRankings = calculateClassWiseRanking(filteredStudents, gradeScale);
 
       const visible = session.role === "STUDENT"
         ? classRankings.filter((r) => r.studentId === session.studentId).map((r) => ({ ...r, studentName: "You", rollNo: session.rollNo || "", studentId: session.studentId }))
@@ -246,7 +247,7 @@ export async function GET(req: Request) {
     }
 
     // 3. Batch-wise ranking (across all sections)
-    const batchRankings = calculateBatchWiseRanking(allStudents);
+    const batchRankings = calculateBatchWiseRanking(allStudents, gradeScale);
 
     const visibleBatch = session.role === "STUDENT"
       ? batchRankings.filter((r) => r.studentId === session.studentId).map((r) => ({ ...r, studentName: "You", rollNo: session.rollNo || "", studentId: session.studentId }))
