@@ -18,7 +18,7 @@ async function main() {
   const settings = [
     { key: "COLLEGE_NAME", value: "Shri Ram Group of Colleges", description: "Institution Full Name" },
     { key: "COLLEGE_CODE", value: "SRGC", description: "Institution Code" },
-    { key: "ACCREDITATION", value: "Autonomous Institution | Approved by AICTE & Accredited with Grade A++", description: "Accreditation string" },
+    { key: "ACCREDITATION", value: "", description: "Optional verified accreditation statement" },
     { key: "PORTAL_VERSION", value: "2.4.0", description: "SRP System Version" },
   ];
 
