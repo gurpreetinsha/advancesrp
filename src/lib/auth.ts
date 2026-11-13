@@ -40,10 +40,39 @@ export async function verifyToken(token: string): Promise<SessionUser | null> {
 }
 
 export async function getSession(): Promise<SessionUser | null> {
-  const cookieStore = cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
+  const token = cookies().get(COOKIE_NAME)?.value;
   if (!token) return null;
-  return verifyToken(token);
+
+  const claims = await verifyToken(token);
+  if (!claims?.id || !claims.email || !claims.role) return null;
+
+  // Treat the JWT as an identifier, not as the source of current privileges.
+  // Re-check account state and role on every authenticated request so
+  // deactivation and role changes take effect immediately.
+  const user = await prisma.user.findUnique({
+    where: { id: claims.id },
+    include: { student: true, faculty: true },
+  });
+
+  if (!user || !user.isActive || user.email.toLowerCase() !== claims.email.toLowerCase()) return null;
+  if (user.role !== claims.role) return null;
+
+  if (user.role === "STUDENT" && (!user.student || !user.student.isActive)) return null;
+  if (user.role === "FACULTY" && (!user.faculty || !user.faculty.isActive)) return null;
+  if (!["ADMIN", "FACULTY", "STUDENT"].includes(user.role)) return null;
+
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role as UserRole,
+    firstName: user.student?.firstName || user.faculty?.firstName || "Admin",
+    lastName: user.student?.lastName || user.faculty?.lastName || "User",
+    studentId: user.student?.id,
+    facultyId: user.faculty?.id,
+    rollNo: user.student?.rollNo,
+    enrollmentNo: user.student?.enrollmentNo,
+    departmentCode: user.student?.departmentId || user.faculty?.departmentId,
+  };
 }
 
 export function setSessionCookie(token: string) {
