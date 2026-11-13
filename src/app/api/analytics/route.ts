@@ -147,7 +147,7 @@ export async function GET() {
     // Faculty Dashboard Metrics
     if (session.role === "FACULTY" && session.facultyId) {
       const assignments = await prisma.facultyAssignment.findMany({
-        where: { facultyId: session.facultyId },
+        where: { facultyId: session.facultyId, canEnterMarks: true },
         include: {
           subject: true,
           semester: true,
@@ -155,10 +155,14 @@ export async function GET() {
         },
       });
 
-      const assignedSubjectIds = assignments.map((a) => a.subjectId);
+      const assignedSubjectIds = Array.from(new Set(assignments.map((a) => a.subjectId)));
+      const assignedAcademicYearIds = Array.from(new Set(assignments.map((a) => a.academicYearId)));
+      const assignedSemesterIds = Array.from(new Set(assignments.map((a) => a.semesterId)));
 
       const activeExams = await prisma.examination.findMany({
         where: {
+          academicYearId: { in: assignedAcademicYearIds },
+          semesterId: { in: assignedSemesterIds },
           examSubjects: {
             some: {
               subjectId: { in: assignedSubjectIds },
