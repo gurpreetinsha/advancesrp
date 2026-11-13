@@ -56,24 +56,27 @@ export async function GET(req: Request) {
       if (!exam) {
         return NextResponse.json({ error: "Examination not found" }, { status: 404 });
       }
+      if (exam.status !== "PUBLISHED") {
+        return NextResponse.json({ error: "Ranking exports are available only for published examinations." }, { status: 409 });
+      }
 
       if (rankingType === "subject" && subjectId) {
         const examSub = exam.examSubjects.find((es) => es.subjectId === subjectId);
         if (!examSub) return NextResponse.json({ error: "Subject not found in exam" }, { status: 404 });
 
-        const enrollmentsMap = new Map(exam.studentExamEnrollments.map((e) => [e.studentId, e]));
-        const rawMarks = examSub.marks.map((m) => {
-          const enr = enrollmentsMap.get(m.studentId);
+        const marksByStudent = new Map(examSub.marks.map((mark) => [mark.studentId, mark]));
+        const rawMarks = exam.studentExamEnrollments.map((enrollment) => {
+          const mark = marksByStudent.get(enrollment.studentId);
           return {
-            studentId: m.studentId,
-            rollNo: m.student.rollNo,
-            studentName: `${m.student.firstName} ${m.student.lastName}`,
-            marksObtained: m.marksObtained,
+            studentId: enrollment.studentId,
+            rollNo: enrollment.student.rollNo,
+            studentName: `${enrollment.student.firstName} ${enrollment.student.lastName}`,
+            marksObtained: mark?.marksObtained ?? null,
             maxMarks: examSub.maxMarks,
             passingMarks: examSub.passingMarks,
-            isAbsent: m.isAbsent,
-            isWithheld: m.isWithheld,
-            isEligible: enr?.isEligible ?? true,
+            isAbsent: mark?.isAbsent ?? false,
+            isWithheld: mark?.isWithheld ?? false,
+            isEligible: enrollment.isEligible,
           };
         });
 
@@ -124,21 +127,22 @@ export async function GET(req: Request) {
         }
 
         for (const es of exam.examSubjects) {
-          for (const m of es.marks) {
-            const entry = cohortMap.get(m.studentId);
-            if (entry) {
-              entry.subjectResults.push({
-                subjectId: es.subject.id,
-                subjectCode: es.subject.code,
-                subjectName: es.subject.name,
-                credits: es.subject.credits,
-                maxMarks: es.maxMarks,
-                passingMarks: es.passingMarks,
-                marksObtained: m.marksObtained,
-                isAbsent: m.isAbsent,
-                isWithheld: m.isWithheld,
-              });
-            }
+          const marksByStudent = new Map(es.marks.map((mark) => [mark.studentId, mark]));
+          for (const enrollment of exam.studentExamEnrollments) {
+            const entry = cohortMap.get(enrollment.studentId);
+            if (!entry) continue;
+            const mark = marksByStudent.get(enrollment.studentId);
+            entry.subjectResults.push({
+              subjectId: es.subject.id,
+              subjectCode: es.subject.code,
+              subjectName: es.subject.name,
+              credits: es.subject.credits,
+              maxMarks: es.maxMarks,
+              passingMarks: es.passingMarks,
+              marksObtained: mark?.marksObtained ?? null,
+              isAbsent: mark?.isAbsent ?? false,
+              isWithheld: mark?.isWithheld ?? false,
+            });
           }
         }
 
