@@ -13,7 +13,7 @@ const createFacultySchema = z.object({
   phone: z.string().optional(),
   designation: z.string().min(2),
   departmentId: z.string(),
-  password: z.string().min(6).default("Faculty@12345"),
+  password: z.string().min(12, "Use a password of at least 12 characters"),
 });
 
 export async function GET() {
