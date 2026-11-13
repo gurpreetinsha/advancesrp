@@ -59,6 +59,7 @@ export async function GET(req: Request) {
       if (exam.status !== "PUBLISHED") {
         return NextResponse.json({ error: "Ranking exports are available only for published examinations." }, { status: 409 });
       }
+      const gradeScale = await prisma.gradeScale.findMany({ orderBy: { minPercentage: "desc" } });
 
       if (rankingType === "subject" && subjectId) {
         const examSub = exam.examSubjects.find((es) => es.subjectId === subjectId);
@@ -149,7 +150,7 @@ export async function GET(req: Request) {
         const studentsList = Array.from(cohortMap.values());
 
         if (rankingType === "class") {
-          const classRanks = calculateClassWiseRanking(studentsList);
+          const classRanks = calculateClassWiseRanking(studentsList, gradeScale);
           exportRows = classRanks.map((r) => ({
             Rank: r.rank,
             "Roll No": r.rollNo,
@@ -164,7 +165,7 @@ export async function GET(req: Request) {
           }));
           filename = `${exam.name.replace(/\s+/g, "_")}_Class_Rankings`;
         } else {
-          const batchRanks = calculateBatchWiseRanking(studentsList);
+          const batchRanks = calculateBatchWiseRanking(studentsList, gradeScale);
           exportRows = batchRanks.map((r) => ({
             Rank: r.rank,
             "Roll No": r.rollNo,
