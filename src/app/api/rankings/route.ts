@@ -58,6 +58,37 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Examination not found" }, { status: 404 });
     }
 
+    if (!["ADMIN", "FACULTY", "STUDENT"].includes(session.role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    if (session.role === "STUDENT") {
+      if (!session.studentId || exam.status !== "PUBLISHED") {
+        return NextResponse.json({ error: "Rankings are unavailable" }, { status: 403 });
+      }
+      const ownEnrollment = exam.studentExamEnrollments.find((e) => e.studentId === session.studentId && e.isEligible);
+      if (!ownEnrollment) return NextResponse.json({ error: "You are not enrolled in this examination." }, { status: 403 });
+    }
+
+    // Faculty access is restricted to assigned subjects and sections.
+    if (session.role === "FACULTY") {
+      if (!session.facultyId || type !== "subject" || !subjectId) {
+        return NextResponse.json({ error: "Faculty may view only rankings for assigned subjects." }, { status: 403 });
+      }
+      const facultyAssignments = await prisma.facultyAssignment.findMany({
+        where: {
+          facultyId: session.facultyId, subjectId,
+          academicYearId: exam.academicYearId, semesterId: exam.semesterId,
+          canEnterMarks: true,
+        },
+        select: { sectionId: true },
+      });
+      if (!facultyAssignments.length) return NextResponse.json({ error: "Not assigned to this subject and academic year." }, { status: 403 });
+      if (sectionId && !facultyAssignments.some((a) => a.sectionId === null || a.sectionId === sectionId)) {
+        return NextResponse.json({ error: "Not assigned to this section." }, { status: 403 });
+      }
+    }
+
     // Students can only access rankings of PUBLISHED examinations
     if (session.role === "STUDENT" && exam.status !== "PUBLISHED") {
       return NextResponse.json(
@@ -92,30 +123,31 @@ export async function GET(req: Request) {
       }
 
       const enrollmentsMap = new Map(exam.studentExamEnrollments.map((e) => [e.studentId, e]));
-
-      let marksList = examSub.marks;
-      if (sectionId) {
-        marksList = marksList.filter((m) => enrollmentsMap.get(m.studentId)?.sectionId === sectionId);
-      }
-
-      const rawSubjectMarks = marksList.map((m) => {
-        const enr = enrollmentsMap.get(m.studentId);
+      const marksMap = new Map(examSub.marks.map((m) => [m.studentId, m]));
+      const scopedEnrollments = exam.studentExamEnrollments.filter((enr) =>
+        (!sectionId || enr.sectionId === sectionId) &&
+        (session.role !== "FACULTY" || !session.facultyId || true)
+      );
+      const rawSubjectMarks = scopedEnrollments.map((enr) => {
+        const mark = marksMap.get(enr.studentId);
         return {
-          studentId: m.studentId,
-          rollNo: m.student.rollNo,
-          studentName: `${m.student.firstName} ${m.student.lastName}`,
-          marksObtained: m.marksObtained,
+          studentId: enr.studentId,
+          rollNo: enr.student.rollNo,
+          studentName: `${enr.student.firstName} ${enr.student.lastName}`,
+          marksObtained: mark?.marksObtained ?? null,
           maxMarks: examSub.maxMarks,
           passingMarks: examSub.passingMarks,
-          isAbsent: m.isAbsent,
-          isWithheld: m.isWithheld,
-          isEligible: enr?.isEligible ?? true,
+          isAbsent: mark?.isAbsent ?? false,
+          isWithheld: mark?.isWithheld ?? false,
+          isEligible: enr.isEligible,
         };
       });
 
       const rankings = calculateSubjectWiseRanking(rawSubjectMarks);
+      const visibleRankings = session.role === "STUDENT"
+        ? rankings.filter((r) => r.studentId === session.studentId).map((r) => ({ ...r, studentName: "You", rollNo: session.rollNo || "", studentId: session.studentId }))
+        : rankings;
 
-      // If student viewer, redact other students' names/roll numbers if desired or show self rank clearly
       return NextResponse.json({
         success: true,
         type: "subject",
@@ -123,7 +155,8 @@ export async function GET(req: Request) {
         subjectCode: examSub.subject.code,
         subjectName: examSub.subject.name,
         maxMarks: examSub.maxMarks,
-        rankings,
+        rankings: visibleRankings,
+        totalEligible: rankings.length,
       });
     }
 
@@ -163,21 +196,24 @@ export async function GET(req: Request) {
     }
 
     for (const es of exam.examSubjects) {
-      for (const m of es.marks) {
-        const sEntry = cohortStudentsMap.get(m.studentId);
-        if (sEntry) {
-          sEntry.subjectResults.push({
-            subjectId: es.subject.id,
-            subjectCode: es.subject.code,
-            subjectName: es.subject.name,
-            credits: es.subject.credits,
-            maxMarks: es.maxMarks,
-            passingMarks: es.passingMarks,
-            marksObtained: m.marksObtained,
-            isAbsent: m.isAbsent,
-            isWithheld: m.isWithheld,
-          });
-        }
+      const marksByStudent = new Map(es.marks.map((mark) => [mark.studentId, mark]));
+      for (const enrollment of exam.studentExamEnrollments) {
+        const sEntry = cohortStudentsMap.get(enrollment.studentId);
+        if (!sEntry) continue;
+        const mark = marksByStudent.get(enrollment.studentId);
+        // Include every configured subject in every eligible student's denominator.
+        // A missing mark is incomplete (zero for provisional arithmetic), never silently omitted.
+        sEntry.subjectResults.push({
+          subjectId: es.subject.id,
+          subjectCode: es.subject.code,
+          subjectName: es.subject.name,
+          credits: es.subject.credits,
+          maxMarks: es.maxMarks,
+          passingMarks: es.passingMarks,
+          marksObtained: mark?.marksObtained ?? null,
+          isAbsent: mark?.isAbsent ?? false,
+          isWithheld: mark?.isWithheld ?? false,
+        });
       }
     }
 
@@ -192,26 +228,32 @@ export async function GET(req: Request) {
 
       const classRankings = calculateClassWiseRanking(filteredStudents);
 
+      const visible = session.role === "STUDENT"
+        ? classRankings.filter((r) => r.studentId === session.studentId).map((r) => ({ ...r, studentName: "You", rollNo: session.rollNo || "", studentId: session.studentId }))
+        : classRankings;
       return NextResponse.json({
         success: true,
         type: "class",
         examName: exam.name,
         sectionId: sectionId || "ALL",
         totalEligible: classRankings.length > 0 ? classRankings[0].totalEligible : 0,
-        rankings: classRankings,
+        rankings: visible,
       });
     }
 
     // 3. Batch-wise ranking (across all sections)
     const batchRankings = calculateBatchWiseRanking(allStudents);
 
+    const visibleBatch = session.role === "STUDENT"
+      ? batchRankings.filter((r) => r.studentId === session.studentId).map((r) => ({ ...r, studentName: "You", rollNo: session.rollNo || "", studentId: session.studentId }))
+      : batchRankings;
     return NextResponse.json({
       success: true,
       type: "batch",
       examName: exam.name,
       batchName: exam.batch.name,
       totalEligible: batchRankings.length > 0 ? batchRankings[0].totalEligible : 0,
-      rankings: batchRankings,
+      rankings: visibleBatch,
     });
   } catch (error) {
     console.error("Rankings API error:", error);
