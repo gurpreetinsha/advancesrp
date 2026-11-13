@@ -103,7 +103,7 @@ export default async function HomePage() {
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-5 text-center shadow-sm dark:border-slate-800 dark:bg-slate-900">
               <div className="text-3xl font-extrabold text-amber-600">RBAC</div>
-              <div className="mt-1 text-xs text-slate-500 font-medium">Immutable Audit Trail</div>
+              <div className="mt-1 text-xs text-slate-500 font-medium">Recorded Audit Events</div>
             </div>
           </div>
         </section>
