@@ -158,7 +158,7 @@ export async function GET(req: Request) {
             "Total Obtained": r.totalObtained,
             "Total Max": r.totalMax,
             "Aggregate (%)": r.aggregatePercentage,
-            SGPA: r.sgpa || "N/A",
+            SGPA: r.sgpa ?? "N/A",
             Status: r.hasPassedAll ? "PASS" : "FAIL",
             "Total Eligible": r.totalEligible,
           }));
@@ -174,7 +174,7 @@ export async function GET(req: Request) {
             "Total Obtained": r.totalObtained,
             "Total Max": r.totalMax,
             "Normalized (%)": r.normalizedPercentage,
-            SGPA: r.sgpa || "N/A",
+            SGPA: r.sgpa ?? "N/A",
             Status: r.hasPassedAll ? "PASS" : "FAIL",
             "Total Eligible": r.totalEligible,
           }));
