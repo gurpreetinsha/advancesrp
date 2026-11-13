@@ -222,7 +222,7 @@ export async function GET(req: Request) {
     }
 
     const allStudents = Array.from(cohortStudentsMap.values());
-    const gradeScale = await prisma.gradeScale.findMany({ orderBy: { minPercentage: "desc" } });
+    const gradeScale = await prisma.gradeScale.findMany({ where: { name: process.env.GRADE_SCALE_NAME || "Standard 10-Point Scale" }, orderBy: { minPercentage: "desc" } });
 
     // 2. Class-wise ranking
     if (type === "class") {
