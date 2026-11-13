@@ -233,9 +233,7 @@ describe("Ranking Engine", () => {
           marksObtained: null, isAbsent: false, isWithheld: true,
         }],
       }]);
-      expect(ranks[0].hasPassedAll).toBe(false);
-      expect(ranks[0].totalMax).toBe(0);
-      expect(ranks[0].sgpa).toBeUndefined();
+      expect(ranks).toHaveLength(0);
     });
 
     it("must preserve a legitimate zero SGPA", () => {
