@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getSession, hashPassword, logAudit } from "@/lib/auth";
+import { getSession, hashPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -241,14 +241,12 @@ export async function PUT(req: Request) {
           data: { isActive },
         });
       }
-    });
-
-    await logAudit({
-      userId: session.id,
-      action: "STUDENT_UPDATED",
-      entityType: "Student",
-      entityId: id,
-      details: { rollNo: student.rollNo, changes: body },
+      await tx.auditLog.create({
+        data: {
+          userId: session.id, action: "STUDENT_UPDATED", entityType: "Student", entityId: id,
+          details: JSON.stringify({ rollNo: student.rollNo, changes: body }),
+        },
+      });
     });
 
     return NextResponse.json({ success: true, message: "Student record updated successfully" });
