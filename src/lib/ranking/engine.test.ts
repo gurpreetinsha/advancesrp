@@ -222,5 +222,35 @@ describe("Ranking Engine", () => {
       expect(getGradeFromPercentage(35)).toEqual({ grade: "F", gradePoint: 0, description: "Fail" });
     });
   });
+
+  describe("Incomplete and withheld records", () => {
+    it("must not mark an all-withheld student as passed", () => {
+      const ranks = calculateClassWiseRanking([{
+        studentId: "s1", rollNo: "CS01", studentName: "Student", isEligible: true,
+        subjectResults: [{
+          subjectId: "sub1", subjectCode: "CS501", subjectName: "DBMS",
+          credits: 3, maxMarks: 100, passingMarks: 40,
+          marksObtained: null, isAbsent: false, isWithheld: true,
+        }],
+      }]);
+      expect(ranks[0].hasPassedAll).toBe(false);
+      expect(ranks[0].totalMax).toBe(0);
+      expect(ranks[0].sgpa).toBeUndefined();
+    });
+
+    it("must preserve a legitimate zero SGPA", () => {
+      const ranks = calculateBatchWiseRanking([{
+        studentId: "s1", rollNo: "CS01", studentName: "Student", isEligible: true,
+        subjectResults: [{
+          subjectId: "sub1", subjectCode: "CS501", subjectName: "DBMS",
+          credits: 3, maxMarks: 100, passingMarks: 40,
+          marksObtained: 0, isAbsent: false, isWithheld: false,
+        }],
+      }]);
+      expect(ranks[0].hasPassedAll).toBe(false);
+      expect(ranks[0].sgpa).toBe(0);
+    });
+  });
+
 });
 
