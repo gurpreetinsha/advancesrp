@@ -148,7 +148,11 @@ export interface RawStudentAggregate {
 export function calculateClassWiseRanking(
   students: RawStudentAggregate[]
 ): ClassWiseRankItem[] {
-  const eligibleStudents = students.filter((s) => s.isEligible);
+  // Rank only complete, non-withheld records so students are compared over
+  // the same configured subject set rather than different denominators.
+  const eligibleStudents = students.filter((s) =>
+    s.isEligible && s.subjectResults.length > 0 && s.subjectResults.every((sub) => !sub.isWithheld)
+  );
   const totalEligible = eligibleStudents.length;
 
   if (totalEligible === 0) return [];
@@ -156,7 +160,7 @@ export function calculateClassWiseRanking(
   const aggregates = eligibleStudents.map((student) => {
     let totalObtained = 0;
     let totalMax = 0;
-    let hasPassedAll = student.subjectResults.some((sub) => !sub.isWithheld);
+    let hasPassedAll = student.subjectResults.length > 0 && student.subjectResults.every((sub) => !sub.isWithheld);
     let totalWeightedPoints = 0;
     let totalCredits = 0;
 
@@ -215,7 +219,7 @@ export function calculateBatchWiseRanking(
   const aggregates = eligibleStudents.map((student) => {
     let totalObtained = 0;
     let totalMax = 0;
-    let hasPassedAll = student.subjectResults.some((sub) => !sub.isWithheld);
+    let hasPassedAll = student.subjectResults.length > 0 && student.subjectResults.every((sub) => !sub.isWithheld);
     let totalWeightedPoints = 0;
     let totalCredits = 0;
 
