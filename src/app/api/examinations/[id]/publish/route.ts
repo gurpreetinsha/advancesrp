@@ -40,7 +40,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
         data: { status: "PUBLISHED", publishedAt: new Date(), publishedById: session.id },
       });
       await tx.mark.updateMany({
-        where: { examSubject: { examId: exam.id }, studentId: { in: exam.studentExamEnrollments.map((e) => e.studentId) } },
+        where: { examSubjectId: { in: exam.examSubjects.map((subject) => subject.id) }, studentId: { in: exam.studentExamEnrollments.map((e) => e.studentId) } },
         data: { status: "PUBLISHED" },
       });
 
