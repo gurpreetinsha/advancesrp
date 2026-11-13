@@ -234,7 +234,7 @@ export async function GET(req: Request) {
       // Overall totals for this exam
       let totalObtained = 0;
       let totalMax = 0;
-      let hasPassedAll = true;
+      let hasPassedAll = subjectResultsForStudent.length > 0 && subjectResultsForStudent.every((subject) => !subject.isWithheld);
 
       for (const sr of subjectResultsForStudent) {
         if (sr.isWithheld) continue;
