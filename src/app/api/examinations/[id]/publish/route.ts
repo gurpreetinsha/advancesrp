@@ -35,10 +35,11 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
       if (complete !== expected) throw new Error(`INCOMPLETE_MARKS:${expected - complete}`);
       if (submitted !== expected) throw new Error(`MARKS_NOT_SUBMITTED:${expected - submitted}`);
 
-      await tx.examination.update({
-        where: { id: exam.id },
+      const transition = await tx.examination.updateMany({
+        where: { id: exam.id, status: "UNDER_REVIEW" },
         data: { status: "PUBLISHED", publishedAt: new Date(), publishedById: session.id },
       });
+      if (transition.count !== 1) throw new Error("EXAM_STATE_CHANGED");
       await tx.mark.updateMany({
         where: { examSubjectId: { in: exam.examSubjects.map((subject) => subject.id) }, studentId: { in: exam.studentExamEnrollments.map((e) => e.studentId) } },
         data: { status: "PUBLISHED" },
@@ -61,6 +62,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message === "EXAM_NOT_FOUND") return NextResponse.json({ error: "Examination not found" }, { status: 404 });
+    if (message === "EXAM_STATE_CHANGED") return NextResponse.json({ error: "Examination state changed during publication. Refresh and retry." }, { status: 409 });
     if (message === "EXAM_NOT_UNDER_REVIEW") return NextResponse.json({ error: "Only examinations under review can be published." }, { status: 409 });
     if (message === "EMPTY_EXAM_COHORT") return NextResponse.json({ error: "Examination must contain subjects and eligible students." }, { status: 400 });
     if (message.startsWith("INCOMPLETE_MARKS:")) return NextResponse.json({ error: `Cannot publish: ${message.split(":")[1]} eligible student-subject mark records are missing.` }, { status: 409 });
