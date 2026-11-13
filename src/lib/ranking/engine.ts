@@ -211,7 +211,9 @@ export function calculateClassWiseRanking(
 export function calculateBatchWiseRanking(
   students: RawStudentAggregate[]
 ): BatchWiseRankItem[] {
-  const eligibleStudents = students.filter((s) => s.isEligible);
+  const eligibleStudents = students.filter((s) =>
+    s.isEligible && s.subjectResults.length > 0 && s.subjectResults.every((sub) => !sub.isWithheld)
+  );
   const totalEligible = eligibleStudents.length;
 
   if (totalEligible === 0) return [];
@@ -251,7 +253,7 @@ export function calculateBatchWiseRanking(
       totalObtained: Number(totalObtained.toFixed(2)),
       totalMax: Number(totalMax.toFixed(2)),
       normalizedPercentage: Number(normalizedPercentage.toFixed(2)),
-      sgpa: sgpa ? Number(sgpa.toFixed(2)) : undefined,
+      sgpa: sgpa !== undefined ? Number(sgpa.toFixed(2)) : undefined,
       totalEligible,
       hasPassedAll,
     };
