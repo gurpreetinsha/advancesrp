@@ -71,6 +71,7 @@ export async function GET(req: Request) {
     }
 
     // Faculty access is restricted to assigned subjects and sections.
+    let facultyAllowedSections: string[] | null = null;
     if (session.role === "FACULTY") {
       if (!session.facultyId || type !== "subject" || !subjectId) {
         return NextResponse.json({ error: "Faculty may view only rankings for assigned subjects." }, { status: 403 });
@@ -84,7 +85,10 @@ export async function GET(req: Request) {
         select: { sectionId: true },
       });
       if (!facultyAssignments.length) return NextResponse.json({ error: "Not assigned to this subject and academic year." }, { status: 403 });
-      if (sectionId && !facultyAssignments.some((a) => a.sectionId === null || a.sectionId === sectionId)) {
+      facultyAllowedSections = facultyAssignments.some((a) => a.sectionId === null)
+        ? null
+        : facultyAssignments.map((a) => a.sectionId).filter((id): id is string => Boolean(id));
+      if (sectionId && facultyAllowedSections && !facultyAllowedSections.includes(sectionId)) {
         return NextResponse.json({ error: "Not assigned to this section." }, { status: 403 });
       }
     }
@@ -126,7 +130,7 @@ export async function GET(req: Request) {
       const marksMap = new Map(examSub.marks.map((m) => [m.studentId, m]));
       const scopedEnrollments = exam.studentExamEnrollments.filter((enr) =>
         (!sectionId || enr.sectionId === sectionId) &&
-        (session.role !== "FACULTY" || !session.facultyId || true)
+        (!facultyAllowedSections || facultyAllowedSections.includes(enr.sectionId || ""))
       );
       const rawSubjectMarks = scopedEnrollments.map((enr) => {
         const mark = marksMap.get(enr.studentId);
