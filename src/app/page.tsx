@@ -62,7 +62,7 @@ export default async function HomePage() {
       <main className="flex-1">
         <section className="px-6 py-16 sm:py-24 max-w-7xl mx-auto text-center">
           <Badge variant="outline" className="mb-4 px-3 py-1 text-xs border-blue-200 text-blue-700 dark:border-blue-800 dark:text-blue-300">
-            Autonomous College Examination System • Version 2.4.0
+            SRGC Examination & Results Portal • Version 2.4.0
           </Badge>
 
           <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight max-w-4xl mx-auto text-balance">
