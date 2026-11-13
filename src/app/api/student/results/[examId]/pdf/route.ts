@@ -198,7 +198,7 @@ export async function GET(req: Request, { params }: { params: { examId: string }
       totalObtained: Number(totalObtained.toFixed(2)),
       totalMax: Number(totalMax.toFixed(2)),
       percentage: Number(percentage.toFixed(2)),
-      overallGrade: overallGrade.grade,
+      overallGrade: subjectsPDF.some((subject) => subject.status === "WITHHELD") ? "I" : overallGrade.grade,
       overallStatus: subjectsPDF.some((subject) => subject.status === "WITHHELD") ? "INCOMPLETE" : hasPassedAll ? "PASS" : "FAIL",
       sgpa: myClassRank?.sgpa,
       classRank: myClassRank ? { rank: myClassRank.rank, totalEligible: myClassRank.totalEligible } : undefined,
