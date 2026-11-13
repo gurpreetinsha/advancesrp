@@ -11,7 +11,7 @@ export interface PDFResultSubject {
   isAbsent: boolean;
   grade: string;
   gradePoint: number;
-  status: "PASS" | "FAIL" | "ABSENT";
+  status: "PASS" | "FAIL" | "ABSENT" | "WITHHELD";
 }
 
 export interface PDFResultData {
@@ -35,7 +35,8 @@ export interface PDFResultData {
   totalMax: number;
   percentage: number;
   overallGrade: string;
-  overallStatus: "PASS" | "FAIL";
+  overallStatus: "PASS" | "FAIL" | "INCOMPLETE";
+  gradeLegend?: string;
   sgpa?: number;
   classRank?: { rank: number; totalEligible: number };
   batchRank?: { rank: number; totalEligible: number };
@@ -214,6 +215,8 @@ export function generateResultPDF(data: PDFResultData): jsPDF {
       if (hookData.section === "body" && hookData.column.index === 8) {
         if (hookData.cell.raw === "FAIL" || hookData.cell.raw === "ABSENT") {
           hookData.cell.styles.textColor = [220, 38, 38]; // Red
+        } else if (hookData.cell.raw === "WITHHELD") {
+          hookData.cell.styles.textColor = [180, 83, 9]; // Amber
         } else {
           hookData.cell.styles.textColor = [22, 101, 52]; // Green
         }
@@ -250,6 +253,9 @@ export function generateResultPDF(data: PDFResultData): jsPDF {
   if (data.overallStatus === "PASS") {
     doc.setTextColor(22, 101, 52);
     doc.text("PASSED", 164, finalY + 8);
+  } else if (data.overallStatus === "INCOMPLETE") {
+    doc.setTextColor(180, 83, 9);
+    doc.text("INCOMPLETE", 164, finalY + 8);
   } else {
     doc.setTextColor(220, 38, 38);
     doc.text("FAILED", 164, finalY + 8);
@@ -260,7 +266,7 @@ export function generateResultPDF(data: PDFResultData): jsPDF {
   doc.setTextColor(71, 85, 105);
   doc.text("SGPA:", 18, finalY + 16);
   doc.setTextColor(15, 23, 42);
-  doc.text(data.sgpa ? data.sgpa.toFixed(2) : "N/A", 48, finalY + 16);
+  doc.text(data.sgpa !== undefined ? data.sgpa.toFixed(2) : "N/A", 48, finalY + 16);
 
   doc.setTextColor(71, 85, 105);
   doc.text("Class Rank:", 88, finalY + 16);
@@ -285,7 +291,7 @@ export function generateResultPDF(data: PDFResultData): jsPDF {
   doc.setFont("helvetica", "normal");
   doc.setTextColor(100, 116, 139);
   doc.text(
-    "Grading Scale: O (Outstanding >=90%), A+ (>=80%), A (>=70%), B+ (>=60%), B (>=50%), C (>=45%), P (Pass >=40%), F (Fail <40%)",
+    data.gradeLegend || "Grading Scale: O (Outstanding >=90%), A+ (>=80%), A (>=70%), B+ (>=60%), B (>=50%), C (>=45%), P (Pass >=40%), F (Fail <40%)",
     18,
     finalY + 26
   );
