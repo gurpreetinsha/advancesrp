@@ -124,7 +124,7 @@ export async function GET(req: Request, { params }: { params: { examId: string }
       }
     }
 
-    const gradeScale = await prisma.gradeScale.findMany({ orderBy: { minPercentage: "desc" } });
+    const gradeScale = await prisma.gradeScale.findMany({ where: { name: process.env.GRADE_SCALE_NAME || "Standard 10-Point Scale" }, orderBy: { minPercentage: "desc" } });
     const allCohort = Array.from(cohortMap.values());
     const batchRanks = calculateBatchWiseRanking(allCohort, gradeScale);
     const myBatchRank = batchRanks.find((r) => r.studentId === student.id);
