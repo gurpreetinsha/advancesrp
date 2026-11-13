@@ -47,12 +47,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "You are not assigned to this section" }, { status: 403 });
     }
 
+    const enrollmentWhere: Record<string, unknown> = { examId, isEligible: true };
+    if (requestedSectionId) enrollmentWhere.sectionId = requestedSectionId;
+    else if (allowedSections) enrollmentWhere.sectionId = { in: allowedSections };
+
     const enrollments = await prisma.studentExamEnrollment.findMany({
-      where: {
-        examId, isEligible: true,
-        ...(requestedSectionId ? { sectionId: requestedSectionId } : {}),
-        ...(allowedSections ? { sectionId: { in: allowedSections } } : {}),
-      },
+      where: enrollmentWhere,
       include: { student: { include: { currentSection: true } }, section: true },
       orderBy: { student: { rollNo: "asc" } },
     });
