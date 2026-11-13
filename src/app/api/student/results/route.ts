@@ -132,23 +132,25 @@ export async function GET(req: Request) {
         });
       }
 
-      // Populate subject marks for all cohort students
+      // Build a complete subject matrix from the historical exam enrollment snapshot.
+      // Missing marks are represented explicitly rather than silently omitted from aggregates.
       for (const es of exam.examSubjects) {
-        for (const m of es.marks) {
-          const sEntry = cohortStudentsMap.get(m.studentId);
-          if (sEntry) {
-            sEntry.subjectResults.push({
-              subjectId: es.subject.id,
-              subjectCode: es.subject.code,
-              subjectName: es.subject.name,
-              credits: es.subject.credits,
-              maxMarks: es.maxMarks,
-              passingMarks: es.passingMarks,
-              marksObtained: m.marksObtained,
-              isAbsent: m.isAbsent,
-              isWithheld: m.isWithheld,
-            });
-          }
+        const marksByStudent = new Map(es.marks.map((mark) => [mark.studentId, mark]));
+        for (const enr of exam.studentExamEnrollments) {
+          const sEntry = cohortStudentsMap.get(enr.studentId);
+          if (!sEntry) continue;
+          const mark = marksByStudent.get(enr.studentId);
+          sEntry.subjectResults.push({
+            subjectId: es.subject.id,
+            subjectCode: es.subject.code,
+            subjectName: es.subject.name,
+            credits: es.subject.credits,
+            maxMarks: es.maxMarks,
+            passingMarks: es.passingMarks,
+            marksObtained: mark?.marksObtained ?? null,
+            isAbsent: mark?.isAbsent ?? false,
+            isWithheld: mark?.isWithheld ?? false,
+          });
         }
       }
 
@@ -168,18 +170,20 @@ export async function GET(req: Request) {
       // 4. Compute Subject-wise Ranking for each subject in this exam
       const subjectResultsForStudent = exam.examSubjects.map((es) => {
         // Collect all student marks in this subject
-        const rawSubjectMarks = es.marks.map((m) => {
-          const sEnr = cohortStudentsMap.get(m.studentId);
+        const marksByStudent = new Map(es.marks.map((mark) => [mark.studentId, mark]));
+        const rawSubjectMarks = exam.studentExamEnrollments.map((enr) => {
+          const sEnr = cohortStudentsMap.get(enr.studentId);
+          const mark = marksByStudent.get(enr.studentId);
           return {
-            studentId: m.studentId,
+            studentId: enr.studentId,
             rollNo: sEnr?.rollNo || "",
             studentName: sEnr?.studentName || "",
-            marksObtained: m.marksObtained,
+            marksObtained: mark?.marksObtained ?? null,
             maxMarks: es.maxMarks,
             passingMarks: es.passingMarks,
-            isAbsent: m.isAbsent,
-            isWithheld: m.isWithheld,
-            isEligible: sEnr?.isEligible ?? true,
+            isAbsent: mark?.isAbsent ?? false,
+            isWithheld: mark?.isWithheld ?? false,
+            isEligible: enr.isEligible,
           };
         });
 
@@ -270,8 +274,12 @@ export async function GET(req: Request) {
 
     // Determine selected result (or latest)
     const selectedResult = requestedExamId
-      ? processedResults.find((r) => r.examId === requestedExamId) || processedResults[0]
+      ? processedResults.find((r) => r.examId === requestedExamId)
       : processedResults[0];
+
+    if (requestedExamId && !selectedResult) {
+      return NextResponse.json({ error: "No published result found for this examination." }, { status: 404 });
+    }
 
     // Performance trend across published exams (sorted chronologically)
     const performanceTrends = [...processedResults]
