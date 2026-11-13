@@ -59,7 +59,7 @@ export async function GET(req: Request) {
       if (exam.status !== "PUBLISHED") {
         return NextResponse.json({ error: "Ranking exports are available only for published examinations." }, { status: 409 });
       }
-      const gradeScale = await prisma.gradeScale.findMany({ orderBy: { minPercentage: "desc" } });
+      const gradeScale = await prisma.gradeScale.findMany({ where: { name: process.env.GRADE_SCALE_NAME || "Standard 10-Point Scale" }, orderBy: { minPercentage: "desc" } });
 
       if (rankingType === "subject" && subjectId) {
         const examSub = exam.examSubjects.find((es) => es.subjectId === subjectId);
