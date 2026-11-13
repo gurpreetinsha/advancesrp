@@ -4,17 +4,20 @@ const bcrypt = require("bcryptjs");
 const prisma = new PrismaClient();
 
 async function hashPassword(password) {
-  const salt = await bcrypt.genSalt(10);
+  const salt = await bcrypt.genSalt(12);
   return bcrypt.hash(password, salt);
 }
 
 async function main() {
-  console.log("Seeding College Student Result Portal (SRP) database...");
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Demo seed is disabled in production. Create production accounts through the secured administrator workflow.");
+  }
+  console.log("Seeding Shri Ram Group of Colleges (SRGC) demo database...");
 
   // 1. System Settings
   const settings = [
-    { key: "COLLEGE_NAME", value: "Apex Institute of Technology & Engineering", description: "Institution Full Name" },
-    { key: "COLLEGE_CODE", value: "AITE", description: "Institution Code" },
+    { key: "COLLEGE_NAME", value: "Shri Ram Group of Colleges", description: "Institution Full Name" },
+    { key: "COLLEGE_CODE", value: "SRGC", description: "Institution Code" },
     { key: "ACCREDITATION", value: "Autonomous Institution | Approved by AICTE & Accredited with Grade A++", description: "Accreditation string" },
     { key: "PORTAL_VERSION", value: "2.4.0", description: "SRP System Version" },
   ];
