@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getSession, logAudit } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
 const createExamSchema = z.object({
   name: z.string().min(2, "Examination name is required"),
-  examDate: z.string().min(1, "Examination date is required"),
+  examDate: z.string().min(1, "Examination date is required").refine((value) => !Number.isNaN(Date.parse(value)), "Invalid examination date"),
   academicYearId: z.string().min(1, "Academic year is required"),
   semesterId: z.string().min(1, "Semester is required"),
   batchId: z.string().min(1, "Batch is required"),
@@ -19,6 +19,8 @@ const createExamSchema = z.object({
       passingMarks: z.number().nonnegative("Passing marks cannot be negative"),
     })
   ).min(1, "At least one subject must be configured for the examination"),
+}).refine((data) => new Set(data.subjects.map((s) => s.subjectId)).size === data.subjects.length, {
+  message: "Duplicate subjects are not allowed",
 });
 
 export async function GET(req: Request) {
@@ -106,6 +108,27 @@ export async function POST(req: Request) {
 
     const data = parsed.data;
 
+    // Validate the academic configuration before writing any records.
+    const [batch, semester, academicYear, configuredSubjects] = await Promise.all([
+      prisma.batch.findUnique({ where: { id: data.batchId }, select: { id: true, branchId: true } }),
+      prisma.semester.findUnique({ where: { id: data.semesterId }, select: { id: true } }),
+      prisma.academicYear.findUnique({ where: { id: data.academicYearId }, select: { id: true, startDate: true, endDate: true } }),
+      prisma.subject.findMany({
+        where: { id: { in: data.subjects.map((s) => s.subjectId) } },
+        select: { id: true, branchId: true, semesterId: true },
+      }),
+    ]);
+    if (!batch || !semester || !academicYear || configuredSubjects.length !== data.subjects.length) {
+      return NextResponse.json({ error: "Invalid batch, semester, academic year, or subject selection." }, { status: 400 });
+    }
+    if (configuredSubjects.some((subject) => subject.branchId !== batch.branchId || subject.semesterId !== data.semesterId)) {
+      return NextResponse.json({ error: "Every examination subject must belong to the selected batch branch and semester." }, { status: 400 });
+    }
+    const examDate = new Date(data.examDate);
+    if (examDate < academicYear.startDate || examDate > academicYear.endDate) {
+      return NextResponse.json({ error: "Examination date must fall within the selected academic year." }, { status: 400 });
+    }
+
     // Validate passing marks <= max marks
     for (const sub of data.subjects) {
       if (sub.passingMarks > sub.maxMarks) {
@@ -143,37 +166,40 @@ export async function POST(req: Request) {
         });
       }
 
-      // 3. Find and enroll eligible students matching batch and semester
-      const eligibleStudents = await tx.student.findMany({
+      // Snapshot the active historical enrollment for this academic year/semester.
+      // Do not derive examination eligibility from mutable current-profile fields.
+      const eligibleEnrollments = await tx.studentEnrollment.findMany({
         where: {
+          academicYearId: data.academicYearId,
           batchId: data.batchId,
-          currentSemesterId: data.semesterId,
-          isActive: true,
+          semesterId: data.semesterId,
+          status: "ACTIVE",
+          student: { isActive: true },
         },
+        select: { studentId: true, batchId: true, semesterId: true, sectionId: true },
       });
 
-      for (const stu of eligibleStudents) {
+      for (const enrollment of eligibleEnrollments) {
         await tx.studentExamEnrollment.create({
           data: {
             examId: createdExam.id,
-            studentId: stu.id,
-            batchId: stu.batchId,
-            semesterId: stu.currentSemesterId,
-            sectionId: stu.currentSectionId,
+            studentId: enrollment.studentId,
+            batchId: enrollment.batchId,
+            semesterId: enrollment.semesterId,
+            sectionId: enrollment.sectionId,
             isEligible: true,
           },
         });
       }
 
-      return createdExam;
-    });
+      await tx.auditLog.create({
+        data: {
+          userId: session.id, action: "EXAM_CREATED", entityType: "Examination", entityId: createdExam.id,
+          details: JSON.stringify({ name: createdExam.name, examDate: createdExam.examDate, batchId: createdExam.batchId, enrolledStudents: eligibleEnrollments.length }),
+        },
+      });
 
-    await logAudit({
-      userId: session.id,
-      action: "EXAM_CREATED",
-      entityType: "Examination",
-      entityId: exam.id,
-      details: { name: exam.name, date: exam.examDate, batchId: exam.batchId },
+      return createdExam;
     });
 
     return NextResponse.json({ success: true, examination: exam }, { status: 201 });
