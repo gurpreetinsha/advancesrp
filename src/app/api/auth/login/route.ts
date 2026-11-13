@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { verifyPassword, signToken, setSessionCookie, logAudit } from "@/lib/auth";
+import { verifyPassword, signToken, setSessionCookie } from "@/lib/auth";
 import { SessionUser, UserRole } from "@/lib/types";
 
 const loginSchema = z.object({
@@ -78,16 +78,16 @@ export async function POST(req: Request) {
       departmentCode: user.student?.department.code || user.faculty?.department.code,
     };
 
+    // Persist the login audit event before issuing a session cookie.
+    await prisma.auditLog.create({
+      data: {
+        userId: user.id, action: "USER_LOGIN", entityType: "User", entityId: user.id,
+        details: JSON.stringify({ role: user.role }),
+      },
+    });
+
     const token = await signToken(sessionPayload);
     setSessionCookie(token);
-
-    await logAudit({
-      userId: user.id,
-      action: "USER_LOGIN",
-      entityType: "User",
-      entityId: user.id,
-      details: { role: user.role, email: user.email },
-    });
 
     return NextResponse.json({
       success: true,
