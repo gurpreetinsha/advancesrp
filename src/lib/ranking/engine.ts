@@ -215,7 +215,7 @@ export function calculateBatchWiseRanking(
   const aggregates = eligibleStudents.map((student) => {
     let totalObtained = 0;
     let totalMax = 0;
-    let hasPassedAll = true;
+    let hasPassedAll = student.subjectResults.some((sub) => !sub.isWithheld);
     let totalWeightedPoints = 0;
     let totalCredits = 0;
 
