@@ -307,7 +307,7 @@ export function generateResultPDF(data: PDFResultData): jsPDF {
   doc.setFontSize(7.5);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(71, 85, 105);
-  doc.text("Result Reference / Verification Code:", 14, signY + 2);
+  doc.text("Report Reference ID:", 14, signY + 2);
   doc.setFont("courier", "bold");
   doc.setTextColor(30, 58, 138);
   doc.text(data.verificationCode, 14, signY + 7);
@@ -316,7 +316,7 @@ export function generateResultPDF(data: PDFResultData): jsPDF {
   doc.setFontSize(6.5);
   doc.setTextColor(148, 163, 184);
   doc.text("Generated securely via College Student Result Portal (SRP).", 14, signY + 12);
-  doc.text("This is a computer generated academic report and does not require a physical stamp.", 14, signY + 16);
+  doc.text("This computer-generated report is provided for academic reference.", 14, signY + 16);
 
   // Signatures
   doc.setFont("helvetica", "normal");
