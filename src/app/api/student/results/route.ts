@@ -35,7 +35,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
-    const gradeScale = await prisma.gradeScale.findMany({ orderBy: { minPercentage: "desc" } });
+    const gradeScale = await prisma.gradeScale.findMany({ where: { name: process.env.GRADE_SCALE_NAME || "Standard 10-Point Scale" }, orderBy: { minPercentage: "desc" } });
 
     // Fetch published examinations the student is enrolled in
     const examEnrollments = await prisma.studentExamEnrollment.findMany({
