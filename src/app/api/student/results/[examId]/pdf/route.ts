@@ -181,7 +181,7 @@ export async function GET(req: Request, { params }: { params: { examId: string }
     const pdfData: PDFResultData = {
       collegeName: process.env.COLLEGE_NAME || "Shri Ram Group of Colleges",
       collegeCode: process.env.COLLEGE_CODE || "SRGC",
-      accreditation: "Autonomous Institution | Approved by AICTE & Accredited with Grade A++",
+      accreditation: process.env.COLLEGE_ACCREDITATION || undefined,
       studentName: `${student.firstName} ${student.lastName}`,
       rollNo: student.rollNo,
       enrollmentNo: student.enrollmentNo,
