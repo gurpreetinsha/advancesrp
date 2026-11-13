@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getSession, hashPassword, logAudit } from "@/lib/auth";
+import { getSession, hashPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +64,8 @@ export async function POST(req: Request) {
     }
 
     const data = parsed.data;
+    const department = await prisma.department.findUnique({ where: { id: data.departmentId }, select: { id: true } });
+    if (!department) return NextResponse.json({ error: "Selected department does not exist." }, { status: 400 });
 
     // Check duplicate
     const existing = await prisma.faculty.findFirst({
@@ -107,15 +109,13 @@ export async function POST(req: Request) {
         },
       });
 
+      await tx.auditLog.create({
+        data: {
+          userId: session.id, action: "FACULTY_CREATED", entityType: "Faculty", entityId: newFaculty.id,
+          details: JSON.stringify({ employeeCode: newFaculty.employeeCode, name: `${newFaculty.firstName} ${newFaculty.lastName}` }),
+        },
+      });
       return newFaculty;
-    });
-
-    await logAudit({
-      userId: session.id,
-      action: "FACULTY_CREATED",
-      entityType: "Faculty",
-      entityId: faculty.id,
-      details: { employeeCode: faculty.employeeCode, name: `${faculty.firstName} ${faculty.lastName}` },
     });
 
     return NextResponse.json({ success: true, faculty }, { status: 201 });
