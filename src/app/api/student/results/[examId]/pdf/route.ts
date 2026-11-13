@@ -167,9 +167,9 @@ export async function GET(req: Request, { params }: { params: { examId: string }
         passingMarks: es.passingMarks,
         marksObtained: obtained,
         isAbsent: Boolean(myMark?.isAbsent),
-        grade: grade.grade,
-        gradePoint: grade.gradePoint,
-        status: (isPass ? "PASS" : (myMark?.isAbsent ? "ABSENT" : "FAIL")) as "PASS" | "FAIL" | "ABSENT",
+        grade: isWithheld ? "WH" : grade.grade,
+        gradePoint: isWithheld ? 0 : grade.gradePoint,
+        status: (isWithheld ? "WITHHELD" : isPass ? "PASS" : (myMark?.isAbsent ? "ABSENT" : "FAIL")) as "PASS" | "FAIL" | "ABSENT" | "WITHHELD",
       };
     });
 
@@ -199,10 +199,11 @@ export async function GET(req: Request, { params }: { params: { examId: string }
       totalMax: Number(totalMax.toFixed(2)),
       percentage: Number(percentage.toFixed(2)),
       overallGrade: overallGrade.grade,
-      overallStatus: hasPassedAll ? "PASS" : "FAIL",
+      overallStatus: subjectsPDF.some((subject) => subject.status === "WITHHELD") ? "INCOMPLETE" : hasPassedAll ? "PASS" : "FAIL",
       sgpa: myClassRank?.sgpa,
       classRank: myClassRank ? { rank: myClassRank.rank, totalEligible: myClassRank.totalEligible } : undefined,
       batchRank: myBatchRank ? { rank: myBatchRank.rank, totalEligible: myBatchRank.totalEligible } : undefined,
+      gradeLegend: gradeScale.map((rule) => `${rule.grade} >= ${rule.minPercentage}%`).join(" | "),
       verificationCode,
     };
 
