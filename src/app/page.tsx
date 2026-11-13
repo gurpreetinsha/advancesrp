@@ -38,7 +38,7 @@ export default async function HomePage() {
             </div>
             <div>
               <span className="text-base font-bold tracking-tight block">
-                Apex Institute of Technology
+                Shri Ram Group of Colleges
               </span>
               <span className="text-[11px] text-slate-500 uppercase tracking-wider block">
                 Student Result Portal (SRP)
@@ -197,7 +197,7 @@ export default async function HomePage() {
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-8 px-6 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>Apex Institute of Technology & Engineering — Student Result Portal (SRP)</div>
+          <div>Shri Ram Group of Colleges (SRGC) — Student Result Portal</div>
           <div className="flex items-center gap-4">
             <Link href="/login" className="hover:underline">Portal Sign In</Link>
             <span>•</span>
