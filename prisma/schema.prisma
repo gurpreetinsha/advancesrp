@@ -299,8 +299,8 @@ model Mark {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
-  examSubject   ExamSubject  @relation(fields: [examSubjectId], references: [id], onDelete: Cascade)
-  student       Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  examSubject   ExamSubject  @relation(fields: [examSubjectId], references: [id], onDelete: Restrict)
+  student       Student      @relation(fields: [studentId], references: [id], onDelete: Restrict)
   enteredBy     User         @relation("EnteredBy", fields: [enteredById], references: [id])
   corrections   MarkCorrectionAudit[]
 
@@ -320,7 +320,7 @@ model MarkCorrectionAudit {
   correctedById String
   createdAt     DateTime     @default(now())
 
-  mark          Mark         @relation(fields: [markId], references: [id], onDelete: Cascade)
+  mark          Mark         @relation(fields: [markId], references: [id], onDelete: Restrict)
   examSubject   ExamSubject  @relation(fields: [examSubjectId], references: [id], onDelete: Cascade)
   student       Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
   correctedBy   User         @relation(fields: [correctedById], references: [id])
