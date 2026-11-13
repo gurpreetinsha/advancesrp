@@ -49,10 +49,12 @@ export async function POST(req: Request) {
         },
       });
 
-      const updatedMark = await tx.mark.update({
-        where: { id: markId },
+      const changed = await tx.mark.updateMany({
+        where: { id: markId, updatedAt: existing.updatedAt },
         data: { marksObtained: newMarks, isAbsent, remarks: `Corrected: ${reason}`, status: "PUBLISHED" },
       });
+      if (changed.count !== 1) throw new Error("MARK_CHANGED");
+      const updatedMark = await tx.mark.findUniqueOrThrow({ where: { id: markId } });
 
       await tx.auditLog.create({
         data: {
@@ -76,6 +78,7 @@ export async function POST(req: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message === "MARK_NOT_FOUND") return NextResponse.json({ error: "Marks record not found" }, { status: 404 });
+    if (message === "MARK_CHANGED") return NextResponse.json({ error: "This mark was changed by another administrator. Reload the record before retrying." }, { status: 409 });
     if (message === "CORRECTION_REQUIRES_PUBLISHED_RESULT") return NextResponse.json({ error: "Corrections are only permitted for published results." }, { status: 409 });
     if (message === "WITHHELD_MARK_REQUIRES_SEPARATE_RELEASE") return NextResponse.json({ error: "Withheld marks require the separate administrative release workflow." }, { status: 409 });
     if (message === "MARKS_OUT_OF_RANGE") return NextResponse.json({ error: "Marks are outside the permitted range." }, { status: 400 });
