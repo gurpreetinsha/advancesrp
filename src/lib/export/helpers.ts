@@ -1,16 +1,31 @@
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 
+// Spreadsheet applications may interpret untrusted cells as formulas.
+// Prefix dangerous leading characters with an apostrophe before serialization.
+function safeSpreadsheetCell(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const normalized = value.replace(/^\\uFEFF/, "");
+  return /^[\\s\\u0000-\\u001f]*[=+@\\-]/.test(normalized) ? `'${normalized}` : normalized;
+}
+
+function sanitizeRows(data: Record<string, unknown>[]): Record<string, unknown>[] {
+  return data.map((row) => Object.fromEntries(
+    Object.entries(row).map(([key, value]) => [safeSpreadsheetCell(key), safeSpreadsheetCell(value)])
+  ));
+}
+
 export function generateCSV(data: Record<string, unknown>[]): string {
-  return Papa.unparse(data);
+  return Papa.unparse(sanitizeRows(data));
 }
 
 export function generateExcelBuffer(sheets: { name: string; data: Record<string, unknown>[] }[]): Buffer {
   const workbook = XLSX.utils.book_new();
 
   for (const sheet of sheets) {
-    const worksheet = XLSX.utils.json_to_sheet(sheet.data);
-    XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name.substring(0, 31));
+    const safeName = sheet.name.replace(/[\\\\/?*\\[\\]:]/g, "_").slice(0, 31) || "Export";
+    const worksheet = XLSX.utils.json_to_sheet(sanitizeRows(sheet.data));
+    XLSX.utils.book_append_sheet(workbook, worksheet, safeName);
   }
 
   return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
@@ -41,6 +56,8 @@ export function parseAndValidateMarksCSV(
   const validRows: { rollNo: string; marksObtained: number | null; isAbsent: boolean; remarks?: string }[] = [];
   const errors: { row: number; rollNo?: string; reason: string }[] = [];
   const seenRollNumbers = new Set<string>();
+
+  parsed.errors.forEach((error) => errors.push({ row: (error.row ?? 0) + 1, reason: `CSV parsing error: ${error.message}` }));
 
   parsed.data.forEach((row, index) => {
     const rowNum = index + 2; // header is row 1
