@@ -176,7 +176,7 @@ export async function GET(req: Request, { params }: { params: { examId: string }
     const percentage = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
     const overallGrade = getGradeFromPercentage(percentage, gradeScale);
 
-    const verificationCode = `SRGC-VERIFY-${exam.id.substring(0, 6).toUpperCase()}-${student.rollNo}-${Date.now().toString(36).toUpperCase()}`;
+    const verificationCode = `SRGC-REF-${exam.id.substring(0, 6).toUpperCase()}-${student.rollNo}-${Date.now().toString(36).toUpperCase()}`;
 
     const pdfData: PDFResultData = {
       collegeName: process.env.COLLEGE_NAME || "Shri Ram Group of Colleges",
