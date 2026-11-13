@@ -105,6 +105,19 @@ export async function POST(req: Request) {
 
     const data = parsed.data;
 
+    const [branch, batch, semester, section] = await Promise.all([
+      prisma.branch.findUnique({ where: { id: data.branchId }, select: { id: true, departmentId: true } }),
+      prisma.batch.findUnique({ where: { id: data.batchId }, select: { id: true, branchId: true } }),
+      prisma.semester.findUnique({ where: { id: data.currentSemesterId }, select: { id: true } }),
+      data.currentSectionId
+        ? prisma.section.findUnique({ where: { id: data.currentSectionId }, select: { id: true, branchId: true } })
+        : Promise.resolve(null),
+    ]);
+    if (!branch || !batch || !semester || branch.departmentId !== data.departmentId ||
+        batch.branchId !== data.branchId || (data.currentSectionId && (!section || section.branchId !== data.branchId))) {
+      return NextResponse.json({ error: "Department, branch, batch, semester, and section selections are inconsistent." }, { status: 400 });
+    }
+
     // Check duplicate email, roll, enrollment
     const existing = await prisma.student.findFirst({
       where: {
@@ -170,15 +183,13 @@ export async function POST(req: Request) {
         });
       }
 
+      await tx.auditLog.create({
+        data: {
+          userId: session.id, action: "STUDENT_CREATED", entityType: "Student", entityId: newStudent.id,
+          details: JSON.stringify({ rollNo: newStudent.rollNo, name: `${newStudent.firstName} ${newStudent.lastName}` }),
+        },
+      });
       return newStudent;
-    });
-
-    await logAudit({
-      userId: session.id,
-      action: "STUDENT_CREATED",
-      entityType: "Student",
-      entityId: student.id,
-      details: { rollNo: student.rollNo, name: `${student.firstName} ${student.lastName}` },
     });
 
     return NextResponse.json({ success: true, student }, { status: 201 });
