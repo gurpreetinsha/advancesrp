@@ -263,8 +263,8 @@ export async function GET(req: Request) {
         totalMax: Number(totalMax.toFixed(2)),
         percentage: Number(overallPercentage.toFixed(2)),
         sgpa: studentClassRank?.sgpa,
-        overallGrade: overallGrade.grade,
-        overallStatus: hasPassedAll ? "PASS" : "FAIL",
+        overallGrade: subjectResultsForStudent.some((subject) => subject.isWithheld) ? "I" : overallGrade.grade,
+        overallStatus: subjectResultsForStudent.some((subject) => subject.isWithheld) ? "INCOMPLETE" : hasPassedAll ? "PASS" : "FAIL",
         classRank: studentClassRank
           ? { rank: studentClassRank.rank, totalEligible: studentClassRank.totalEligible }
           : null,
