@@ -250,5 +250,14 @@ describe("Ranking Engine", () => {
     });
   });
 
+
+  describe("Configured institutional grade scales", () => {
+    it("uses the configured threshold and grade point when supplied", () => {
+      expect(getGradeFromPercentage(75, [
+        { minPercentage: 0, maxPercentage: 100, grade: "X", gradePoint: 5, description: "Institutional grade" },
+      ])).toEqual({ grade: "X", gradePoint: 5, description: "Institutional grade" });
+    });
+  });
+
 });
 
