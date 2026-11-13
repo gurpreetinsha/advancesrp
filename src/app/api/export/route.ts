@@ -13,8 +13,10 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   try {
     const session = await getSession();
-    if (!session || (session.role !== "ADMIN" && session.role !== "FACULTY")) {
-      return NextResponse.json({ error: "Unauthorized access to export functions" }, { status: 403 });
+    if (!session || session.role !== "ADMIN") {
+      // Exports contain bulk student identifiers and marks. Until a fully
+      // scoped faculty export workflow is available, keep bulk export admin-only.
+      return NextResponse.json({ error: "Only administrators may export bulk student or examination data." }, { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);
