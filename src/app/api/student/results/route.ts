@@ -35,6 +35,8 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Student not found" }, { status: 404 });
     }
 
+    const gradeScale = await prisma.gradeScale.findMany({ orderBy: { minPercentage: "desc" } });
+
     // Fetch published examinations the student is enrolled in
     const examEnrollments = await prisma.studentExamEnrollment.findMany({
       where: {
@@ -157,14 +159,14 @@ export async function GET(req: Request) {
       const allCohortStudents = Array.from(cohortStudentsMap.values());
 
       // 2. Compute Batch-wide Ranking
-      const batchRankings = calculateBatchWiseRanking(allCohortStudents);
+      const batchRankings = calculateBatchWiseRanking(allCohortStudents, gradeScale);
       const studentBatchRank = batchRankings.find((r) => r.studentId === student.id);
 
       // 3. Compute Class-wide Ranking (students within same historical section)
       const sectionCohortStudents = historicalSectionId
         ? allCohortStudents.filter((s) => s.sectionId === historicalSectionId)
         : allCohortStudents;
-      const classRankings = calculateClassWiseRanking(sectionCohortStudents);
+      const classRankings = calculateClassWiseRanking(sectionCohortStudents, gradeScale);
       const studentClassRank = classRankings.find((r) => r.studentId === student.id);
 
       // 4. Compute Subject-wise Ranking for each subject in this exam
@@ -198,7 +200,7 @@ export async function GET(req: Request) {
             : (myMarkRecord.marksObtained as number);
 
         const percentage = obtained !== null && es.maxMarks > 0 ? (obtained / es.maxMarks) * 100 : 0;
-        const gradeInfo = getGradeFromPercentage(percentage);
+        const gradeInfo = getGradeFromPercentage(percentage, gradeScale);
 
         // Class average for comparison chart
         const validMarks = es.marks.filter((m) => !m.isAbsent && m.marksObtained !== null).map((m) => m.marksObtained!);
