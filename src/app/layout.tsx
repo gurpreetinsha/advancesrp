@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Apex Institute - Student Result Portal (SRP)",
-  description: "Official internal examinations and academic performance portal",
+  title: "SRGC — Student Result Portal",
+  description: "Shri Ram Group of Colleges official examination results and academic performance portal.",
+  applicationName: "SRGC Student Result Portal",
 };
 
 export default function RootLayout({
@@ -19,4 +20,3 @@ export default function RootLayout({
     </html>
   );
 }
-
