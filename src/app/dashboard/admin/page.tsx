@@ -316,7 +316,7 @@ export default function AdminDashboardPage() {
               >
                 <div className="flex items-center gap-2.5 text-xs font-semibold">
                   <History className="h-4 w-4 text-slate-600" />
-                  <span>Immutable Audit Trail</span>
+                  <span>Audit Logs</span>
                 </div>
                 <ArrowRight className="h-3.5 w-3.5 text-slate-400" />
               </Link>
