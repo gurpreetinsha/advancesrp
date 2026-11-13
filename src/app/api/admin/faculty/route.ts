@@ -137,50 +137,53 @@ export async function PUT(req: Request) {
     const { action, facultyId, assignmentId, subjectId, semesterId, sectionId, academicYearId } = body;
 
     if (action === "ASSIGN") {
-      const assignment = await prisma.facultyAssignment.upsert({
-        where: {
-          facultyId_subjectId_academicYearId_semesterId_sectionId: {
-            facultyId,
-            subjectId,
-            academicYearId,
-            semesterId,
-            sectionId: sectionId || null,
+      if (![facultyId, subjectId, academicYearId, semesterId].every((value) => typeof value === "string" && value.length > 0)) {
+        return NextResponse.json({ error: "facultyId, subjectId, academicYearId, and semesterId are required." }, { status: 400 });
+      }
+      const [faculty, subject, academicYear, semester, section] = await Promise.all([
+        prisma.faculty.findUnique({ where: { id: facultyId }, select: { id: true, isActive: true } }),
+        prisma.subject.findUnique({ where: { id: subjectId }, select: { id: true, branchId: true, semesterId: true } }),
+        prisma.academicYear.findUnique({ where: { id: academicYearId }, select: { id: true } }),
+        prisma.semester.findUnique({ where: { id: semesterId }, select: { id: true } }),
+        sectionId ? prisma.section.findUnique({ where: { id: sectionId }, select: { id: true, branchId: true } }) : Promise.resolve(null),
+      ]);
+      if (!faculty?.isActive || !subject || !academicYear || !semester ||
+          subject.semesterId !== semesterId ||
+          (sectionId && (!section || section.branchId !== subject.branchId))) {
+        return NextResponse.json({ error: "Faculty, subject, academic year, semester, or section configuration is invalid." }, { status: 400 });
+      }
+
+      const assignment = await prisma.$transaction(async (tx) => {
+        const existing = await tx.facultyAssignment.findFirst({
+          where: { facultyId, subjectId, academicYearId, semesterId, sectionId: sectionId || null },
+        });
+        const saved = existing
+          ? await tx.facultyAssignment.update({ where: { id: existing.id }, data: { canEnterMarks: true } })
+          : await tx.facultyAssignment.create({
+              data: { facultyId, subjectId, academicYearId, semesterId, sectionId: sectionId || null, canEnterMarks: true },
+            });
+        await tx.auditLog.create({
+          data: {
+            userId: session.id, action: "FACULTY_ASSIGNMENT_CREATED",
+            entityType: "FacultyAssignment", entityId: saved.id,
+            details: JSON.stringify({ facultyId, subjectId, academicYearId, semesterId, sectionId: sectionId || null }),
           },
-        },
-        update: { canEnterMarks: true },
-        create: {
-          facultyId,
-          subjectId,
-          academicYearId,
-          semesterId,
-          sectionId: sectionId || null,
-          canEnterMarks: true,
-        },
+        });
+        return saved;
       });
-
-      await logAudit({
-        userId: session.id,
-        action: "FACULTY_ASSIGNMENT_CREATED",
-        entityType: "FacultyAssignment",
-        entityId: assignment.id,
-        details: { facultyId, subjectId, semesterId, sectionId },
-      });
-
       return NextResponse.json({ success: true, assignment });
     }
 
     if (action === "REMOVE") {
-      await prisma.facultyAssignment.delete({
-        where: { id: assignmentId },
+      if (typeof assignmentId !== "string" || !assignmentId) {
+        return NextResponse.json({ error: "assignmentId is required." }, { status: 400 });
+      }
+      await prisma.$transaction(async (tx) => {
+        await tx.facultyAssignment.delete({ where: { id: assignmentId } });
+        await tx.auditLog.create({
+          data: { userId: session.id, action: "FACULTY_ASSIGNMENT_REMOVED", entityType: "FacultyAssignment", entityId: assignmentId },
+        });
       });
-
-      await logAudit({
-        userId: session.id,
-        action: "FACULTY_ASSIGNMENT_REMOVED",
-        entityType: "FacultyAssignment",
-        entityId: assignmentId,
-      });
-
       return NextResponse.json({ success: true, message: "Assignment removed" });
     }
 
