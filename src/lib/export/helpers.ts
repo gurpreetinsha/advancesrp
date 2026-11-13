@@ -11,7 +11,7 @@ function safeSpreadsheetCell(value: unknown): unknown {
 
 function sanitizeRows(data: Record<string, unknown>[]): Record<string, unknown>[] {
   return data.map((row) => Object.fromEntries(
-    Object.entries(row).map(([key, value]) => [safeSpreadsheetCell(key), safeSpreadsheetCell(value)])
+    Object.entries(row).map(([key, value]) => [key, safeSpreadsheetCell(value)])
   ));
 }
 
