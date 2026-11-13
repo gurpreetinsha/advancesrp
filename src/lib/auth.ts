@@ -51,7 +51,7 @@ export async function getSession(): Promise<SessionUser | null> {
   // deactivation and role changes take effect immediately.
   const user = await prisma.user.findUnique({
     where: { id: claims.id },
-    include: { student: true, faculty: true },
+    include: { student: { include: { department: true } }, faculty: { include: { department: true } } },
   });
 
   if (!user || !user.isActive || user.email.toLowerCase() !== claims.email.toLowerCase()) return null;
@@ -71,7 +71,7 @@ export async function getSession(): Promise<SessionUser | null> {
     facultyId: user.faculty?.id,
     rollNo: user.student?.rollNo,
     enrollmentNo: user.student?.enrollmentNo,
-    departmentCode: user.student?.departmentId || user.faculty?.departmentId,
+    departmentCode: user.student?.department.code || user.faculty?.department.code,
   };
 }
 
