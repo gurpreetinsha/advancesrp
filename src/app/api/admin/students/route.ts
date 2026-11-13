@@ -17,7 +17,7 @@ const createStudentSchema = z.object({
   batchId: z.string(),
   currentSemesterId: z.string(),
   currentSectionId: z.string().optional(),
-  password: z.string().min(6).default("Student@12345"),
+  password: z.string().min(12, "Use a password of at least 12 characters"),
 });
 
 export async function GET(req: Request) {
